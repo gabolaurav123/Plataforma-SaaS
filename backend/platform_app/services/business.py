@@ -590,7 +590,7 @@ def set_admin(db, bot, actor, telegram_id, role, permissions=None, *, platform_o
     )
     before = {"role": row.role, "active": row.active, "permissions": row.permissions} if row else {}
     if not row:
-        row = m.BotAdmin(tenant_id=bot.tenant_id, bot_id=bot.id, user_id=user.id)
+        row = m.BotAdmin(id=m.uid(), tenant_id=bot.tenant_id, bot_id=bot.id, user_id=user.id)
         db.add(row)
     row.role, row.active, row.permissions = role, True, sorted(allowed)
     audit(
@@ -599,6 +599,10 @@ def set_admin(db, bot, actor, telegram_id, role, permissions=None, *, platform_o
         actor,
         "BOT_ADMIN_CHANGED",
         row.id,
-        {"before": before, "after": {"role": role, "permissions": row.permissions, "user_id": user.id}},
+        {
+            "bot_id": bot.id,
+            "before": before,
+            "after": {"role": role, "permissions": row.permissions, "user_id": user.id},
+        },
     )
     return row

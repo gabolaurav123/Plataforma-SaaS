@@ -115,11 +115,19 @@ def test_scheduled_summaries_are_unique_and_can_be_disabled_before_send(env):
 
 
 def test_custom_team_roles_cannot_escalate_or_cross_bot(env):
+    from platform_app.services.console import Console
+    from platform_app.services.console_business import record_query
+
     bot, _, _ = bot_parts(env)
     with env["r"].db.system() as db:
         user = upsert_user(db, {"id": 404, "first_name": "Support"})
         row = business.set_admin(db, bot, env["ua"], 404, "CUSTOM", ["read", "support", "team"])
         assert row.bot_id == bot.id
+        db.flush()
+        ui = Console(env["r"], db, bot, {"update_id": 810010}, {"id": 101})
+        events = list(db.scalars(record_query(ui, "audit")))
+        assert any(x.action == "BOT_ADMIN_CHANGED" and x.entity_id == row.id for x in events)
+        assert all(x.tenant_id == bot.tenant_id for x in events)
         with pytest.raises(DomainError, match="permisos"):
             business.set_admin(db, bot, user.id, 202, "ADMIN")
         assert (

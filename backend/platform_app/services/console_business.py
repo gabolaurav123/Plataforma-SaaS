@@ -156,6 +156,9 @@ def record_query(ui, resource, filters=None):
                 select(m.Payment.id).where(m.Payment.bot_id == ui.bot.id),
                 select(m.Plan.id).where(m.Plan.bot_id == ui.bot.id),
                 select(m.Contact.id).where(m.Contact.bot_id == ui.bot.id),
+                select(m.Channel.id).where(m.Channel.bot_id == ui.bot.id),
+                select(m.BotAdmin.id).where(m.BotAdmin.bot_id == ui.bot.id),
+                select(m.AccessOffer.id).where(m.AccessOffer.bot_id == ui.bot.id),
             )
         )
         query = query.where(
