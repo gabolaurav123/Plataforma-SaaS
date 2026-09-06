@@ -1,5 +1,6 @@
 import json
 from functools import lru_cache
+from typing import Literal
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -23,6 +24,7 @@ class Settings(BaseSettings):
     init_data_max_age_seconds: int = 300
     trial_days: int = 7
     storage_path: str = "./storage"
+    receipt_storage: Literal["filesystem", "database"] = "filesystem"
     max_upload_bytes: int = 5 * 1024 * 1024
     telegram_test_environment: bool = False
     demo_enabled: bool = False

@@ -75,6 +75,14 @@ def test_management_mode_disabled_has_actionable_instructions(env):
     assert "BotFather" in " ".join(result.json()["instructions"])
 
 
+def test_configuring_master_rejects_a_token_for_another_bot_before_writing(env):
+    env["r"].settings.master_bot_username = "the_new_master_bot"
+    env["fake"].calls.clear()
+    with pytest.raises(DomainError, match="Master Bot configurado"):
+        env["r"].manager.configure_master()
+    assert [method for _, method, _ in env["fake"].calls] == ["getMe"]
+
+
 def test_provision_rotation_and_token_refresh(env):
     r = env["r"]
     with r.db.system() as db:
@@ -199,7 +207,9 @@ def test_recurring_renewal_uses_authoritative_period_end(env):
         assert second.expires_at == end + 2592000
 
 
-def test_receipt_hash_review_and_approval(env):
+@pytest.mark.parametrize("storage", ["filesystem", "database"])
+def test_receipt_hash_review_and_approval(env, storage):
+    env["r"].settings.receipt_storage = storage
     item = payment(env, "BANK_TRANSFER")
     bot, _, _ = bot_parts(env)
     data = io.BytesIO()
@@ -215,6 +225,32 @@ def test_receipt_hash_review_and_approval(env):
         assert pay.status == "APPROVED"
         env["r"].receipts.review(db, bot, first, env["ua"], "APPROVE")
         assert db.scalar(select(func.count()).select_from(m.Subscription)) == 1
+
+
+def test_database_receipt_survives_a_worker_with_another_filesystem(env, tmp_path):
+    from platform_app.runtime import Runtime
+    from platform_app.api.serialization import public
+
+    env["r"].settings.receipt_storage = "database"
+    item = payment(env, "BANK_TRANSFER")
+    bot, _, _ = bot_parts(env)
+    data = io.BytesIO()
+    Image.new("RGB", (32, 32), "blue").save(data, format="PNG")
+    with env["r"].db.system() as db:
+        receipt = env["r"].receipts.submit(db, bot, db.get(m.Payment, item.id), data.getvalue())
+        receipt_id = receipt.id
+        assert "receipt_ciphertext" not in public(receipt)
+
+    other = Runtime(env["r"].settings.model_copy(update={"storage_path": str(tmp_path / "other")}))
+    try:
+        with other.db.tenant(bot.tenant_id) as db:
+            receipt = db.get(m.BankReceipt, receipt_id)
+            assert other.receipts.read(receipt).startswith(b"\xff\xd8")
+        with other.db.tenant(env["tb"]) as db:
+            assert db.get(m.BankReceipt, receipt_id) is None
+        assert not (tmp_path / "other").exists()
+    finally:
+        other.db.engine.dispose()
 
 
 def test_invalid_upload_rejected(env):

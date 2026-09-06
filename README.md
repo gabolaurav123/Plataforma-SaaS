@@ -1,5 +1,7 @@
 # Creator Engine · Telegram
 
+**Seenode + Neon:** [guía con servicios, build, inicio, puertos, variables y BotFather](docs/seenode.md).
+
 Plataforma nueva e independiente para creadores: Master Bot, Master Mini App, Managed Bots oficiales y Customer Mini App sobre un backend central. **El bot actual de producción no se leyó, modificó, conectó ni migró.**
 
 Esta entrega contiene una implementación ejecutable, migraciones y pruebas. Es una primera versión extensa; **todavía no es una plataforma certificada para producción ni incluye todas las funciones de la visión final**. Consulta el [estado por fase](docs/estado.md) y el [informe de pruebas](docs/pruebas.md).

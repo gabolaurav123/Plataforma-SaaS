@@ -24,6 +24,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+      - run: npm run build:seenode
       - run: npm audit --audit-level=high
   postgres-schema:
     runs-on: ubuntu-latest

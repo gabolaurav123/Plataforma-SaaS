@@ -46,12 +46,16 @@ class ReceiptService:
             duplicate=duplicate,
             suspicious=duplicate,
         )
-        path = Path(self.r.settings.storage_path) / receipt.storage_key
-        path.parent.mkdir(parents=True, exist_ok=True)
         encrypted = self.r.vault.encrypt(
             base64.b64encode(image["bytes"]).decode(), f"{bot.tenant_id}:{receipt.id}:receipt"
         )
-        path.write_text(json.dumps(encrypted), encoding="utf-8")
+        if self.r.settings.receipt_storage == "database":
+            receipt.receipt_ciphertext = encrypted
+            receipt.storage_key = f"database/{receipt.id}"
+        else:
+            path = Path(self.r.settings.storage_path) / receipt.storage_key
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(encrypted), encoding="utf-8")
         session.add(receipt)
         payment.status = "RECEIPT_SUBMITTED"
         contact = session.get(Contact, payment.contact_id)
@@ -77,12 +81,15 @@ class ReceiptService:
         return receipt
 
     def read(self, receipt):
-        root = Path(self.r.settings.storage_path).resolve()
-        path = (root / receipt.storage_key).resolve()
-        if not path.is_relative_to(root) or not path.is_file():
-            raise DomainError("RECEIPT_UNAVAILABLE", "Comprobante no disponible.", 404)
+        encrypted = receipt.receipt_ciphertext
+        if encrypted is None:
+            root = Path(self.r.settings.storage_path).resolve()
+            path = (root / receipt.storage_key).resolve()
+            if not path.is_relative_to(root) or not path.is_file():
+                raise DomainError("RECEIPT_UNAVAILABLE", "Comprobante no disponible.", 404)
+            encrypted = json.loads(path.read_text(encoding="utf-8"))
         value = self.r.vault.decrypt(
-            json.loads(path.read_text(encoding="utf-8")), f"{receipt.tenant_id}:{receipt.id}:receipt"
+            encrypted, f"{receipt.tenant_id}:{receipt.id}:receipt"
         )
         return base64.b64decode(value)
 

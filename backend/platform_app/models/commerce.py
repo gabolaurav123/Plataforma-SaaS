@@ -118,6 +118,7 @@ class BankReceipt(Scoped, Base):
     sha256: Mapped[str] = mapped_column(String(64), index=True)
     perceptual_hash: Mapped[str | None] = mapped_column(String(16))
     storage_key: Mapped[str] = mapped_column(String(120))
+    receipt_ciphertext: Mapped[dict | None] = mapped_column(JSON, deferred=True)
     media_type: Mapped[str] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(30), default="PENDING")
     suspicious: Mapped[bool] = mapped_column(Boolean, default=False)

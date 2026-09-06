@@ -9,6 +9,8 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
+    "build:seenode": "node scripts/build-seenode.mjs",
+    "start:seenode": "node dist/standalone/server.js",
     "lint": "oxlint app components/platform lib",
     "format": "oxfmt",
     "check": "tsc --noEmit && npm run lint"

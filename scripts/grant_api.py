@@ -6,6 +6,7 @@ from platform_app.runtime import Runtime
 with Runtime().db.system() as db:
     if db.bind.dialect.name != "postgresql":
         raise SystemExit("PostgreSQL only")
+    db.execute(text("GRANT USAGE ON SCHEMA public TO platform_api"))
     db.execute(text("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO platform_api"))
     db.execute(text("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO platform_api"))
     db.execute(text("REVOKE UPDATE, DELETE ON audit_logs FROM platform_api"))

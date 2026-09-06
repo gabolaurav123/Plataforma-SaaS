@@ -57,6 +57,11 @@ class TelegramBotManager:
 
     def configure_master(self):
         capability = self.capabilities()
+        expected = self.r.settings.master_bot_username.lstrip("@").lower()
+        if expected and (capability["username"] or "").lower() != expected:
+            raise DomainError(
+                "MASTER_BOT_MISMATCH", "El token no corresponde al Master Bot configurado.", 409
+            )
         client = self.r.clients.master()
         client.call(
             "setWebhook",

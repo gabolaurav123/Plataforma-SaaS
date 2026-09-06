@@ -7,6 +7,7 @@ PRIVATE_COLUMNS = {
     "webhook_secret_hash",
     "secrets_ciphertext",
     "storage_key",
+    "receipt_ciphertext",
     "sha256",
     "perceptual_hash",
     "invoice_payload",

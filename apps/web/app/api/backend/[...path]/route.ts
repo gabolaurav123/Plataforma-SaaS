@@ -1,11 +1,9 @@
-import { env } from 'cloudflare:workers';
-
 // The origin is operator-controlled. Never proxy to a hostname supplied by a browser.
 async function proxy(
   request: Request,
   context: { params: Promise<{ path: string[] }> },
 ) {
-  const origin = (env as unknown as Record<string, string>).PLATFORM_API_URL;
+  const origin = process.env.PLATFORM_API_URL;
   if (!origin)
     return Response.json(
       {

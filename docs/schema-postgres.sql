@@ -1364,5 +1364,11 @@ CREATE POLICY tenant_isolation ON "jobs" USING
 
 UPDATE alembic_version SET version_num='0002' WHERE alembic_version.version_num = '0001';
 
+-- Running upgrade 0002 -> 0003
+
+ALTER TABLE bank_receipts ADD COLUMN receipt_ciphertext JSON;
+
+UPDATE alembic_version SET version_num='0003' WHERE alembic_version.version_num = '0002';
+
 COMMIT;
 
