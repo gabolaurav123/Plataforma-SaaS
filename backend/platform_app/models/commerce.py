@@ -1,4 +1,4 @@
-from sqlalchemy import String, BigInteger, JSON, Boolean, UniqueConstraint, CheckConstraint
+from sqlalchemy import String, BigInteger, JSON, Boolean, UniqueConstraint, CheckConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base, Scoped, scoped_constraints, tenant_fk
 
@@ -37,6 +37,9 @@ class Plan(Scoped, Base):
     recurring: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(default=0)
     product_kind: Mapped[str] = mapped_column(String(20), default="DIGITAL")
+    visible: Mapped[bool] = mapped_column(Boolean, default=True)
+    archived_at: Mapped[int | None] = mapped_column(BigInteger)
+    purchase_message: Mapped[str] = mapped_column(String(2000), default="")
 
 
 class PlanPrice(Scoped, Base):
@@ -70,6 +73,7 @@ class Payment(Scoped, Base):
         tenant_fk("plan_id", "plans"),
         UniqueConstraint("tenant_id", "idempotency_key"),
         CheckConstraint("amount_minor > 0"),
+        Index("ix_payment_bot_status", "bot_id", "status", "created_at"),
     )
     bot_id: Mapped[str] = mapped_column(String(36))
     contact_id: Mapped[str] = mapped_column(String(36), index=True)
@@ -80,6 +84,8 @@ class Payment(Scoped, Base):
     duration_days: Mapped[int] = mapped_column(default=30)
     recurring: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(30), default="PENDING", index=True)
+    provider_reference: Mapped[str | None] = mapped_column(String(255), index=True)
+    channel_snapshot: Mapped[list] = mapped_column(JSON, default=list)
     idempotency_key: Mapped[str] = mapped_column(String(160))
     invoice_payload: Mapped[str] = mapped_column(String(128), unique=True)
     checkout_url: Mapped[str | None] = mapped_column(String(1024))
@@ -100,6 +106,8 @@ class PaymentCharge(Scoped, Base):
         tenant_fk("payment_id", "payments"),
         tenant_fk("bot_id", "managed_bots"),
         UniqueConstraint("bot_id", "provider", "charge_id"),
+        Index("ix_charge_bot_period", "bot_id", "created_at", "currency"),
+        Index("ix_charge_payment", "payment_id", "created_at"),
     )
     payment_id: Mapped[str] = mapped_column(String(36))
     bot_id: Mapped[str] = mapped_column(String(36))
@@ -125,6 +133,7 @@ class BankReceipt(Scoped, Base):
     duplicate: Mapped[bool] = mapped_column(Boolean, default=False)
     reviewed_by: Mapped[str | None] = mapped_column(String(36))
     review_note: Mapped[str] = mapped_column(String(500), default="")
+    reviewed_at: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class Subscription(Scoped, Base):
@@ -135,12 +144,16 @@ class Subscription(Scoped, Base):
         tenant_fk("plan_id", "plans"),
         tenant_fk("payment_id", "payments"),
         UniqueConstraint("payment_id"),
+        Index("ix_subscription_bot_status_end", "bot_id", "status", "expires_at"),
+        Index("ix_subscription_contact_status_end", "contact_id", "status", "expires_at"),
     )
     bot_id: Mapped[str] = mapped_column(String(36))
     contact_id: Mapped[str] = mapped_column(String(36), index=True)
     plan_id: Mapped[str] = mapped_column(String(36))
-    payment_id: Mapped[str] = mapped_column(String(36))
+    payment_id: Mapped[str | None] = mapped_column(String(36))
     kind: Mapped[str] = mapped_column(String(30), default="CUSTOMER_SUBSCRIPTION")
+    origin: Mapped[str] = mapped_column(String(24), default="PAYMENT")
+    channel_snapshot: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(30), default="ACTIVE", index=True)
     starts_at: Mapped[int] = mapped_column(BigInteger)
     expires_at: Mapped[int] = mapped_column(BigInteger, index=True)

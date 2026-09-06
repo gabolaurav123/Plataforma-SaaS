@@ -33,6 +33,9 @@ def enforce_write_scope(session, *_):
 
 class Database:
     def __init__(self, settings):
+        self.on_jobs = lambda: None
+        self.on_bots = lambda: None
+
         def engine(url):
             kwargs = {"pool_pre_ping": True}
             if url.startswith("sqlite"):
@@ -58,8 +61,13 @@ class Database:
     @contextmanager
     def system(self):
         """Only trusted webhook routing, identity bootstrap, workers and audited owner operations."""
-        with Session(self.system_engine, expire_on_commit=False) as session, session.begin():
-            yield session
+        with Session(self.system_engine, expire_on_commit=False) as session:
+            with session.begin():
+                yield session
+            if session.info.get("jobs_enqueued"):
+                self.on_jobs()
+            if session.info.get("bots_changed"):
+                self.on_bots()
 
     @contextmanager
     def tenant(self, tenant_id):
@@ -72,6 +80,10 @@ class Database:
                     text("SELECT set_config('app.tenant_id', :tenant, true)"), {"tenant": tenant_id}
                 )
             yield session
+        if session.info.get("jobs_enqueued"):
+            self.on_jobs()
+        if session.info.get("bots_changed"):
+            self.on_bots()
 
     def verify_production_boundary(self):
         """Fail deployment if the API credential can bypass or dismantle tenant RLS."""
@@ -101,7 +113,13 @@ class Database:
             }
             if dangerous or not expected.issubset(protected):
                 raise RuntimeError("API database role or tenant RLS is unsafe")
-            for private_table in ["console_states", "console_buttons", "poll_cursors", "auth_sessions"]:
+            for private_table in [
+                "console_states",
+                "console_buttons",
+                "poll_cursors",
+                "auth_sessions",
+                "platform_settings",
+            ]:
                 if connection.scalar(
                     text(
                         "SELECT has_table_privilege(current_user, :table_name, 'SELECT,INSERT,UPDATE,DELETE')"

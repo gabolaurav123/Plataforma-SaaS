@@ -33,6 +33,9 @@ def upsert_contact(session, bot, user, attribution_code=None):
             first_name=user.get("first_name", "Cliente")[:128],
             username=user.get("username"),
             last_seen_at=now(),
+            locale=user.get("language_code", "es").split("-")[0]
+            if user.get("language_code", "es").split("-")[0] in {"es", "en", "pt"}
+            else "es",
         )
         session.add(contact)
         session.flush()
@@ -57,6 +60,8 @@ def upsert_contact(session, bot, user, attribution_code=None):
                         Referral(tenant_id=bot.tenant_id, referrer_id=referrer.id, referred_id=contact.id)
                     )
     contact.last_seen_at = now()
+    contact.username = user.get("username")
+    contact.first_name = user.get("first_name", contact.first_name)[:128]
     return contact
 
 
@@ -74,12 +79,14 @@ def conversation(session, bot, contact):
 
 
 def incoming(session, bot, contact, text, message_id):
+    from ..security import redact
+
     conv = conversation(session, bot, contact)
     message = Message(
         tenant_id=bot.tenant_id,
         conversation_id=conv.id,
         direction="IN",
-        text=text[:4096],
+        text=redact(text[:4096]),
         telegram_message_id=message_id,
         status="RECEIVED",
     )

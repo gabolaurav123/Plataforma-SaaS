@@ -3,10 +3,12 @@ from sqlalchemy import select, func
 from ..models import (
     Payment,
     PaymentCharge,
+    ManagedBot,
     Plan,
     PlanPrice,
     Contact,
     ProviderConfig,
+    BotPaymentMethod,
     Subscription,
     Coupon,
     CouponRedemption,
@@ -112,10 +114,14 @@ class ExternalHostedProvider:
 class PaymentService:
     def __init__(self, runtime):
         self.r = runtime
+        from .external_payments import HostedProvider
+
         self.providers = {
             "TELEGRAM_STARS": TelegramStarsProvider(runtime),
             "BANK_TRANSFER": BankTransferProvider(),
             "EXTERNAL_HOSTED_PROVIDER": ExternalHostedProvider(),
+            "STRIPE": HostedProvider(runtime, "STRIPE"),
+            "PAYPAL": HostedProvider(runtime, "PAYPAL"),
         }
 
     def create(
@@ -130,12 +136,13 @@ class PaymentService:
         *,
         context="TELEGRAM",
         coupon_code=None,
+        defer_checkout=False,
     ):
         entitlement(session, bot.tenant_id)
         if contact.bot_id != bot.id or contact.tenant_id != bot.tenant_id:
             raise DomainError("NOT_FOUND", "Cliente no disponible.", 404)
         plan = get_scoped(session, Plan, plan_id, bot.tenant_id)
-        if plan.bot_id != bot.id or not plan.active:
+        if plan.bot_id != bot.id or not plan.active or plan.archived_at:
             raise DomainError("PLAN_UNAVAILABLE", "Plan no disponible.", 404)
         if plan.product_kind == "DIGITAL" and context == "TELEGRAM" and provider != "TELEGRAM_STARS":
             raise DomainError(
@@ -143,6 +150,8 @@ class PaymentService:
             )
         if not bot.published and context == "TELEGRAM":
             raise DomainError("BOT_NOT_PUBLISHED", "Este bot todavía no está publicado.", 409)
+        if provider not in self.providers:
+            raise DomainError("INVALID_PROVIDER", "Proveedor no soportado.")
         feature(
             session,
             bot.tenant_id,
@@ -150,16 +159,26 @@ class PaymentService:
                 "TELEGRAM_STARS": "stars",
                 "BANK_TRANSFER": "bank_payments",
                 "EXTERNAL_HOSTED_PROVIDER": "external_payments",
+                "STRIPE": "external_payments",
+                "PAYPAL": "external_payments",
             }[provider],
         )
         config = session.scalar(
-            select(ProviderConfig).where(
-                ProviderConfig.tenant_id == bot.tenant_id,
-                ProviderConfig.provider == provider,
-                ProviderConfig.enabled.is_(True),
+            select(BotPaymentMethod).where(
+                BotPaymentMethod.tenant_id == bot.tenant_id,
+                BotPaymentMethod.bot_id == bot.id,
+                BotPaymentMethod.provider == provider,
             )
         )
-        if not config:
+        if config is None:
+            config = session.scalar(
+                select(ProviderConfig).where(
+                    ProviderConfig.tenant_id == bot.tenant_id,
+                    ProviderConfig.provider == provider,
+                    ProviderConfig.enabled.is_(True),
+                )
+            )
+        if not config or not config.enabled:
             raise DomainError("PAYMENT_METHOD_DISABLED", "Método de pago no disponible.", 409)
         previous = session.scalar(
             select(Payment).where(
@@ -225,7 +244,11 @@ class PaymentService:
             recurring=plan.recurring and provider == "TELEGRAM_STARS",
             idempotency_key=idempotency_key,
             invoice_payload=f"customer:{uid()}",
+            channel_snapshot=[],
         )
+        from .business import plan_channels
+
+        payment.channel_snapshot = plan_channels(session, plan)
         session.add(payment)
         session.flush()
         if coupon:
@@ -234,7 +257,17 @@ class PaymentService:
                     tenant_id=bot.tenant_id, coupon_id=coupon.id, contact_id=contact.id, payment_id=payment.id
                 )
             )
-        self.providers[provider].create_payment(session, bot, payment)
+        if defer_checkout:
+            enqueue(
+                session,
+                "CHECKOUT",
+                bot.tenant_id,
+                {"payment_id": payment.id},
+                "checkout:" + payment.id,
+                bot.id,
+            )
+        else:
+            self.providers[provider].create_payment(session, bot, payment)
         contact.stage = "PAYMENT_PENDING"
         emit(session, bot.tenant_id, "PAYMENT_CREATED", f"payment:{payment.id}", bot.id, contact.id)
         return payment
@@ -292,6 +325,8 @@ class PaymentService:
         )
 
     def confirm(self, session, bot, payment, charge_id, actor, period_end=None):
+        if payment.tenant_id != bot.tenant_id or payment.bot_id != bot.id:
+            raise DomainError("NOT_FOUND", "Pago no disponible.", 404)
         session.scalar(select(Payment).where(Payment.id == payment.id).with_for_update())
         previous = session.scalar(
             select(PaymentCharge).where(
@@ -333,27 +368,68 @@ class PaymentService:
                 expires_at=period_end or max(latest, now()) + payment.duration_days * 86400,
                 auto_renew=payment.recurring,
                 initial_charge_id=charge_id if payment.recurring else None,
+                channel_snapshot=list(payment.channel_snapshot),
             )
             session.add(sub)
         else:
             sub.expires_at = max(sub.expires_at, period_end or sub.expires_at)
             sub.status, sub.renewal_status = "ACTIVE", "ACTIVE"
-        session.add(
-            PaymentCharge(
-                tenant_id=bot.tenant_id,
-                payment_id=payment.id,
-                bot_id=bot.id,
-                provider=payment.provider,
-                charge_id=charge_id,
-                amount_minor=payment.amount_minor,
-                currency=payment.currency,
-                period_end=sub.expires_at,
-            )
+        charge = PaymentCharge(
+            id=uid(),
+            tenant_id=bot.tenant_id,
+            payment_id=payment.id,
+            bot_id=bot.id,
+            provider=payment.provider,
+            charge_id=charge_id,
+            amount_minor=payment.amount_minor,
+            currency=payment.currency,
+            period_end=sub.expires_at,
         )
+        session.add(charge)
         payment.status, payment.confirmed_at = "APPROVED", now()
         recovered = contact.stage == "EXPIRED"
         contact.stage = "ACTIVE"
         session.flush()
+        self.r.ledger.sale(session, charge)
+        from .business import history
+
+        history(session, sub, actor, "RENEWED" if renewal else "CREATED", "charge:" + charge.id)
+        from .notifications import customer, notify
+        from .business import money
+
+        customer(
+            session,
+            bot,
+            contact,
+            "RENEWAL" if renewal else "PAYMENT_APPROVED",
+            "purchase-notice:" + charge.id,
+            sub,
+            payment,
+        )
+        plan = session.get(Plan, payment.plan_id)
+        if plan.purchase_message:
+            from .texts import render, customer_variables
+            from .common import send
+
+            send(
+                session,
+                bot,
+                contact.telegram_user_id,
+                render(plan.purchase_message, customer_variables(session, bot, contact, sub, payment)),
+                "after-purchase:" + charge.id,
+                service_message=True,
+            )
+        notify(
+            session,
+            self.r,
+            bot,
+            "new_sale",
+            f"💰 {money(payment.amount_minor, payment.currency)} · {plan.name}\n{contact.first_name}",
+            "sale:" + charge.id,
+            "payments",
+            "detail",
+            {"resource": "payments", "id": payment.id},
+        )
         audit(session, bot.tenant_id, actor, "PAYMENT_APPROVED", payment.id)
         emit(
             session,
@@ -393,50 +469,55 @@ class PaymentService:
         charge = session.scalar(
             select(PaymentCharge)
             .where(
-                PaymentCharge.bot_id == bot.id, PaymentCharge.charge_id == event["telegram_payment_charge_id"]
+                PaymentCharge.tenant_id == bot.tenant_id,
+                PaymentCharge.bot_id == bot.id,
+                PaymentCharge.provider == "TELEGRAM_STARS",
+                PaymentCharge.charge_id == event["telegram_payment_charge_id"],
             )
             .with_for_update()
         )
         if not charge or charge.refunded_at:
             return
-        charge.refunded_at = now()
-        payment = session.get(Payment, charge.payment_id)
-        remaining = list(
-            session.scalars(
-                select(PaymentCharge).where(
-                    PaymentCharge.payment_id == payment.id,
-                    PaymentCharge.refunded_at.is_(None),
-                    PaymentCharge.id != charge.id,
-                )
-            )
+        from .refunds import record
+
+        return record(
+            session,
+            self.r,
+            bot,
+            charge,
+            charge.amount_minor,
+            "stars:" + charge.charge_id,
+            "telegram",
+            "Telegram Stars refund",
         )
-        sub = session.scalar(select(Subscription).where(Subscription.payment_id == payment.id))
-        if not remaining:
-            payment.status = "REFUNDED"
-        if sub:
-            sub.expires_at = max([x.period_end or 0 for x in remaining], default=now())
-            if sub.expires_at <= now():
-                sub.status, sub.auto_renew = "EXPIRED", False
-                enqueue(
-                    session,
-                    "REVOKE_ACCESS",
-                    bot.tenant_id,
-                    {"subscription_id": sub.id},
-                    f"refund-revoke:{charge.id}",
-                    bot.id,
-                )
-        audit(session, bot.tenant_id, "telegram", "PAYMENT_REFUNDED", payment.id)
 
     def expire_due(self, session):
-        rows = session.scalars(
-            select(Subscription)
-            .where(Subscription.status == "ACTIVE", Subscription.expires_at <= now())
-            .with_for_update(skip_locked=True)
-            .limit(100)
+        rows = list(
+            session.scalars(
+                select(Subscription)
+                .where(Subscription.status == "ACTIVE", Subscription.expires_at <= now())
+                .with_for_update(skip_locked=True)
+                .limit(100)
+            )
         )
+        if len(rows) == 100:
+            enqueue(session, "EXPIRE_SUBSCRIPTIONS", None, {}, f"expire-batch:{now() // 60}:{rows[-1].id}")
         for sub in rows:
             sub.status = "EXPIRED"
+            from .business import history
+
+            history(session, sub, "system", "EXPIRED", f"expired:{sub.id}:{sub.expires_at}")
             contact = session.get(Contact, sub.contact_id)
+            from .notifications import customer
+
+            customer(
+                session,
+                session.get(ManagedBot, sub.bot_id),
+                contact,
+                "SUBSCRIPTION_EXPIRED",
+                f"expired-message:{sub.id}:{sub.expires_at}",
+                sub,
+            )
             other = session.scalar(
                 select(Subscription.id).where(
                     Subscription.contact_id == contact.id,

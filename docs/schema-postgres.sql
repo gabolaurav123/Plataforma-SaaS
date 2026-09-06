@@ -1419,5 +1419,615 @@ CREATE INDEX ix_poll_cursors_created_at ON poll_cursors (created_at);
 
 UPDATE alembic_version SET version_num='0004' WHERE alembic_version.version_num = '0003';
 
+-- Running upgrade 0004 -> 0005
+
+CREATE TABLE platform_settings (
+    key VARCHAR(80) NOT NULL,
+    value JSON NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE (key)
+);
+
+CREATE INDEX ix_platform_settings_created_at ON platform_settings (created_at);
+
+CREATE TABLE connection_attempts (
+    actor_id VARCHAR(36) NOT NULL,
+    request_key VARCHAR(160) NOT NULL,
+    token_ciphertext JSON,
+    candidate JSON NOT NULL,
+    replace_bot_id VARCHAR(36),
+    status VARCHAR(24) NOT NULL,
+    expires_at BIGINT NOT NULL,
+    error_code VARCHAR(64),
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(actor_id) REFERENCES platform_users (id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (tenant_id, id),
+    UNIQUE (tenant_id, request_key)
+);
+
+CREATE INDEX ix_connection_attempts_created_at ON connection_attempts (created_at);
+
+CREATE INDEX ix_connection_attempts_expires_at ON connection_attempts (expires_at);
+
+CREATE INDEX ix_connection_attempts_tenant_id ON connection_attempts (tenant_id);
+
+CREATE TABLE billing_cycles (
+    subscription_id VARCHAR(36) NOT NULL,
+    plan_id VARCHAR(36) NOT NULL,
+    plan_name VARCHAR(40) NOT NULL,
+    fixed_usd_minor BIGINT NOT NULL,
+    commission_bps INTEGER NOT NULL,
+    starts_at BIGINT NOT NULL,
+    ends_at BIGINT NOT NULL,
+    due_at BIGINT NOT NULL,
+    status VARCHAR(24) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(plan_id) REFERENCES saas_plans (id),
+    FOREIGN KEY(tenant_id, subscription_id) REFERENCES saas_subscriptions (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (subscription_id, starts_at),
+    UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX ix_billing_cycles_created_at ON billing_cycles (created_at);
+
+CREATE INDEX ix_billing_cycles_tenant_id ON billing_cycles (tenant_id);
+
+CREATE INDEX ix_cycle_close ON billing_cycles (status, ends_at);
+
+CREATE TABLE bot_admins (
+    bot_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    permissions JSON NOT NULL,
+    active BOOLEAN NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, bot_id) REFERENCES managed_bots (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    FOREIGN KEY(user_id) REFERENCES platform_users (id),
+    UNIQUE (bot_id, user_id),
+    UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX ix_bot_admins_bot_id ON bot_admins (bot_id);
+
+CREATE INDEX ix_bot_admins_created_at ON bot_admins (created_at);
+
+CREATE INDEX ix_bot_admins_tenant_id ON bot_admins (tenant_id);
+
+CREATE TABLE bot_payment_methods (
+    bot_id VARCHAR(36) NOT NULL,
+    provider VARCHAR(30) NOT NULL,
+    enabled BOOLEAN NOT NULL,
+    public_config JSON NOT NULL,
+    secrets_ciphertext JSON,
+    webhook_key VARCHAR(36) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, bot_id) REFERENCES managed_bots (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (bot_id, provider),
+    UNIQUE (tenant_id, id),
+    UNIQUE (webhook_key)
+);
+
+CREATE INDEX ix_bot_payment_methods_bot_id ON bot_payment_methods (bot_id);
+
+CREATE INDEX ix_bot_payment_methods_created_at ON bot_payment_methods (created_at);
+
+CREATE INDEX ix_bot_payment_methods_tenant_id ON bot_payment_methods (tenant_id);
+
+CREATE TABLE reports (
+    bot_id VARCHAR(36) NOT NULL,
+    actor_id VARCHAR(36) NOT NULL,
+    starts_at BIGINT NOT NULL,
+    ends_at BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    summary JSON NOT NULL,
+    content_ciphertext JSON,
+    expires_at BIGINT NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, bot_id) REFERENCES managed_bots (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX ix_reports_bot_id ON reports (bot_id);
+
+CREATE INDEX ix_reports_created_at ON reports (created_at);
+
+CREATE INDEX ix_reports_tenant_id ON reports (tenant_id);
+
+CREATE TABLE platform_invoices (
+    cycle_id VARCHAR(36) NOT NULL,
+    number VARCHAR(60) NOT NULL,
+    currency VARCHAR(8) NOT NULL,
+    fixed_minor BIGINT NOT NULL,
+    commission_minor BIGINT,
+    adjustment_minor BIGINT NOT NULL,
+    paid_minor BIGINT NOT NULL,
+    breakdown JSON NOT NULL,
+    due_at BIGINT NOT NULL,
+    status VARCHAR(24) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, cycle_id) REFERENCES billing_cycles (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (cycle_id),
+    UNIQUE (number),
+    UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX ix_platform_invoice_due ON platform_invoices (status, due_at);
+
+CREATE INDEX ix_platform_invoices_created_at ON platform_invoices (created_at);
+
+CREATE INDEX ix_platform_invoices_tenant_id ON platform_invoices (tenant_id);
+
+CREATE TABLE access_offers (
+    bot_id VARCHAR(36) NOT NULL,
+    plan_id VARCHAR(36) NOT NULL,
+    code_hash VARCHAR(64) NOT NULL,
+    code_ciphertext JSON NOT NULL,
+    duration_days INTEGER NOT NULL,
+    channel_ids JSON NOT NULL,
+    max_uses INTEGER NOT NULL,
+    uses INTEGER NOT NULL,
+    expires_at BIGINT NOT NULL,
+    active BOOLEAN NOT NULL,
+    actor_id VARCHAR(36) NOT NULL,
+    note VARCHAR(500) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, bot_id) REFERENCES managed_bots (tenant_id, id),
+    FOREIGN KEY(tenant_id, plan_id) REFERENCES plans (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (code_hash),
+    UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX ix_access_offers_bot_id ON access_offers (bot_id);
+
+CREATE INDEX ix_access_offers_created_at ON access_offers (created_at);
+
+CREATE INDEX ix_access_offers_tenant_id ON access_offers (tenant_id);
+
+CREATE TABLE invoice_adjustments (
+    invoice_id VARCHAR(36) NOT NULL,
+    amount_minor BIGINT NOT NULL,
+    reason VARCHAR(500) NOT NULL,
+    actor_id VARCHAR(64) NOT NULL,
+    operation_key VARCHAR(160) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, invoice_id) REFERENCES platform_invoices (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (tenant_id, id),
+    UNIQUE (tenant_id, operation_key)
+);
+
+CREATE INDEX ix_invoice_adjustments_created_at ON invoice_adjustments (created_at);
+
+CREATE INDEX ix_invoice_adjustments_invoice_id ON invoice_adjustments (invoice_id);
+
+CREATE INDEX ix_invoice_adjustments_tenant_id ON invoice_adjustments (tenant_id);
+
+CREATE TABLE plan_channels (
+    plan_id VARCHAR(36) NOT NULL,
+    channel_id VARCHAR(36) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, channel_id) REFERENCES channels (tenant_id, id),
+    FOREIGN KEY(tenant_id, plan_id) REFERENCES plans (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (plan_id, channel_id),
+    UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX ix_plan_channels_channel_id ON plan_channels (channel_id);
+
+CREATE INDEX ix_plan_channels_created_at ON plan_channels (created_at);
+
+CREATE INDEX ix_plan_channels_plan_id ON plan_channels (plan_id);
+
+CREATE INDEX ix_plan_channels_tenant_id ON plan_channels (tenant_id);
+
+CREATE TABLE platform_settlements (
+    invoice_id VARCHAR(36) NOT NULL,
+    method VARCHAR(24) NOT NULL,
+    reference_hash VARCHAR(64) NOT NULL,
+    reference VARCHAR(240) NOT NULL,
+    amount_usd_minor BIGINT NOT NULL,
+    evidence JSON NOT NULL,
+    receipt_ciphertext JSON,
+    media_type VARCHAR(50),
+    status VARCHAR(24) NOT NULL,
+    submitted_by VARCHAR(36) NOT NULL,
+    reviewed_by VARCHAR(64),
+    reviewed_at BIGINT,
+    note VARCHAR(500) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, invoice_id) REFERENCES platform_invoices (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (reference_hash),
+    UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX ix_platform_settlements_created_at ON platform_settlements (created_at);
+
+CREATE INDEX ix_platform_settlements_invoice_id ON platform_settlements (invoice_id);
+
+CREATE INDEX ix_platform_settlements_tenant_id ON platform_settlements (tenant_id);
+
+CREATE TABLE access_redemptions (
+    offer_id VARCHAR(36) NOT NULL,
+    contact_id VARCHAR(36) NOT NULL,
+    subscription_id VARCHAR(36) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, contact_id) REFERENCES contacts (tenant_id, id),
+    FOREIGN KEY(tenant_id, offer_id) REFERENCES access_offers (tenant_id, id),
+    FOREIGN KEY(tenant_id, subscription_id) REFERENCES subscriptions (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (offer_id, contact_id),
+    UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX ix_access_redemptions_created_at ON access_redemptions (created_at);
+
+CREATE INDEX ix_access_redemptions_offer_id ON access_redemptions (offer_id);
+
+CREATE INDEX ix_access_redemptions_tenant_id ON access_redemptions (tenant_id);
+
+CREATE TABLE commission_entries (
+    cycle_id VARCHAR(36),
+    charge_id VARCHAR(36) NOT NULL,
+    entry_key VARCHAR(160) NOT NULL,
+    currency VARCHAR(8) NOT NULL,
+    gross_minor BIGINT NOT NULL,
+    commission_bps INTEGER NOT NULL,
+    usd_rate VARCHAR(60),
+    rate_source VARCHAR(100) NOT NULL,
+    entry_type VARCHAR(20) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, charge_id) REFERENCES payment_charges (tenant_id, id),
+    FOREIGN KEY(tenant_id, cycle_id) REFERENCES billing_cycles (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (tenant_id, entry_key),
+    UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX ix_commission_cycle_currency ON commission_entries (cycle_id, currency);
+
+CREATE INDEX ix_commission_entries_created_at ON commission_entries (created_at);
+
+CREATE INDEX ix_commission_entries_tenant_id ON commission_entries (tenant_id);
+
+CREATE TABLE payment_refunds (
+    bot_id VARCHAR(36) NOT NULL,
+    charge_id VARCHAR(36) NOT NULL,
+    provider VARCHAR(40) NOT NULL,
+    reference VARCHAR(255) NOT NULL,
+    amount_minor BIGINT NOT NULL,
+    currency VARCHAR(8) NOT NULL,
+    actor_id VARCHAR(64) NOT NULL,
+    reason VARCHAR(500) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, bot_id) REFERENCES managed_bots (tenant_id, id),
+    FOREIGN KEY(tenant_id, charge_id) REFERENCES payment_charges (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (bot_id, provider, reference),
+    UNIQUE (tenant_id, id)
+);
+
+CREATE INDEX ix_payment_refunds_bot_id ON payment_refunds (bot_id);
+
+CREATE INDEX ix_payment_refunds_charge_id ON payment_refunds (charge_id);
+
+CREATE INDEX ix_payment_refunds_created_at ON payment_refunds (created_at);
+
+CREATE INDEX ix_payment_refunds_tenant_id ON payment_refunds (tenant_id);
+
+CREATE INDEX ix_refund_bot_period ON payment_refunds (bot_id, created_at, currency);
+
+CREATE TABLE subscription_history (
+    subscription_id VARCHAR(36) NOT NULL,
+    revision BIGINT NOT NULL,
+    actor_id VARCHAR(64) NOT NULL,
+    action VARCHAR(40) NOT NULL,
+    operation_key VARCHAR(200) NOT NULL,
+    before JSON NOT NULL,
+    after JSON NOT NULL,
+    reason VARCHAR(500) NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(tenant_id, subscription_id) REFERENCES subscriptions (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id),
+    UNIQUE (subscription_id, revision),
+    UNIQUE (tenant_id, id),
+    UNIQUE (tenant_id, operation_key)
+);
+
+CREATE INDEX ix_sub_history_timeline ON subscription_history (subscription_id, created_at, revision);
+
+CREATE INDEX ix_subscription_history_created_at ON subscription_history (created_at);
+
+CREATE INDEX ix_subscription_history_subscription_id ON subscription_history (subscription_id);
+
+CREATE INDEX ix_subscription_history_tenant_id ON subscription_history (tenant_id);
+
+ALTER TABLE bank_receipts ADD COLUMN reviewed_at BIGINT;
+
+ALTER TABLE bot_settings ADD COLUMN preferences JSON DEFAULT '{}' NOT NULL;
+
+ALTER TABLE campaigns ADD COLUMN media JSON DEFAULT '{}' NOT NULL;
+
+ALTER TABLE campaigns ADD COLUMN buttons JSON DEFAULT '[]' NOT NULL;
+
+ALTER TABLE campaigns ADD COLUMN actor_id VARCHAR(36);
+
+ALTER TABLE campaigns ADD COLUMN audience_count INTEGER DEFAULT 0 NOT NULL;
+
+ALTER TABLE console_states ADD COLUMN navigation JSON DEFAULT '[]' NOT NULL;
+
+ALTER TABLE console_states ADD COLUMN screen JSON DEFAULT '{}' NOT NULL;
+
+ALTER TABLE contacts ADD COLUMN locale VARCHAR(8) DEFAULT 'es' NOT NULL;
+
+CREATE INDEX ix_contact_bot_created ON contacts (bot_id, created_at);
+
+CREATE INDEX ix_contact_bot_page ON contacts (bot_id, id);
+
+ALTER TABLE jobs ADD COLUMN lane VARCHAR(16) DEFAULT 'background' NOT NULL;
+
+ALTER TABLE jobs ADD COLUMN started_at BIGINT;
+
+ALTER TABLE jobs ADD COLUMN stream_key VARCHAR(100);
+
+ALTER TABLE jobs ADD COLUMN sequence BIGINT DEFAULT 0 NOT NULL;
+
+CREATE INDEX ix_job_lane_due ON jobs (lane, status, run_at, tenant_id);
+
+CREATE INDEX ix_job_stale ON jobs (status, lease_until);
+
+CREATE INDEX ix_job_stream_sequence ON jobs (stream_key, status, sequence);
+
+CREATE INDEX ix_jobs_lane ON jobs (lane);
+
+CREATE INDEX ix_jobs_stream_key ON jobs (stream_key);
+
+ALTER TABLE managed_bots ADD COLUMN connection_kind VARCHAR(20) DEFAULT 'MANAGED' NOT NULL;
+
+ALTER TABLE managed_bots ADD COLUMN disconnected_at BIGINT;
+
+CREATE INDEX ix_charge_bot_period ON payment_charges (bot_id, created_at, currency);
+
+CREATE INDEX ix_charge_payment ON payment_charges (payment_id, created_at);
+
+ALTER TABLE payments ADD COLUMN provider_reference VARCHAR(255);
+
+ALTER TABLE payments ADD COLUMN channel_snapshot JSON DEFAULT '[]' NOT NULL;
+
+CREATE INDEX ix_payment_bot_status ON payments (bot_id, status, created_at);
+
+CREATE INDEX ix_payments_provider_reference ON payments (provider_reference);
+
+ALTER TABLE plans ADD COLUMN visible BOOLEAN DEFAULT true NOT NULL;
+
+ALTER TABLE plans ADD COLUMN archived_at BIGINT;
+
+ALTER TABLE plans ADD COLUMN purchase_message VARCHAR(2000) DEFAULT '' NOT NULL;
+
+ALTER TABLE platform_users ADD COLUMN trial_used_at BIGINT;
+
+ALTER TABLE provider_events ADD COLUMN payload_ciphertext JSON;
+
+ALTER TABLE provider_events ADD COLUMN status VARCHAR(20) DEFAULT 'PENDING' NOT NULL;
+
+ALTER TABLE saas_plans ADD COLUMN fixed_usd_minor BIGINT DEFAULT 0 NOT NULL;
+
+ALTER TABLE saas_plans ADD COLUMN commission_bps INTEGER DEFAULT 800 NOT NULL;
+
+ALTER TABLE saas_subscriptions ADD COLUMN trial_starts_at BIGINT;
+
+ALTER TABLE saas_subscriptions ADD COLUMN cycle_started_at BIGINT;
+
+ALTER TABLE saas_subscriptions ADD COLUMN pending_plan_id VARCHAR(36);
+
+ALTER TABLE saas_subscriptions ADD COLUMN grace_days INTEGER DEFAULT 3 NOT NULL;
+
+ALTER TABLE saas_subscriptions ADD COLUMN cancelled_at BIGINT;
+
+ALTER TABLE saas_subscriptions ADD CONSTRAINT fk_saas_pending_plan FOREIGN KEY(pending_plan_id) REFERENCES saas_plans (id);
+
+ALTER TABLE subscriptions ADD COLUMN origin VARCHAR(24) DEFAULT 'PAYMENT' NOT NULL;
+
+ALTER TABLE subscriptions ADD COLUMN channel_snapshot JSON DEFAULT '[]' NOT NULL;
+
+ALTER TABLE subscriptions ALTER COLUMN payment_id DROP NOT NULL;
+
+CREATE INDEX ix_subscription_bot_status_end ON subscriptions (bot_id, status, expires_at);
+
+CREATE INDEX ix_subscription_contact_status_end ON subscriptions (contact_id, status, expires_at);
+
+ALTER TABLE telegram_updates ADD COLUMN sensitive_ciphertext JSON;
+
+ALTER TABLE tenants ADD COLUMN admin_suspended_at BIGINT;
+
+UPDATE saas_subscriptions SET trial_starts_at=created_at WHERE trial_ends_at>created_at;
+
+UPDATE platform_users SET trial_used_at=(SELECT min(s.created_at) FROM saas_subscriptions s JOIN tenants t ON t.id=s.tenant_id WHERE t.owner_user_id=platform_users.id);
+
+UPDATE saas_plans SET fixed_usd_minor=0, commission_bps=800 WHERE name='STARTER';
+
+UPDATE saas_plans SET fixed_usd_minor=3000, commission_bps=400 WHERE name='PRO';
+
+UPDATE saas_plans SET fixed_usd_minor=8000, commission_bps=100 WHERE name='AGENCY';
+
+UPDATE saas_plans SET features=(features::jsonb || jsonb_build_object('external_payments',true))::json;
+
+INSERT INTO plan_channels(id,created_at,updated_at,tenant_id,plan_id,channel_id) SELECT gen_random_uuid()::text,created_at,updated_at,tenant_id,id,channel_id FROM plans WHERE channel_id IS NOT NULL;
+
+UPDATE payments SET channel_snapshot=(SELECT CASE WHEN p.channel_id IS NULL THEN '[]'::json ELSE json_build_array(p.channel_id) END FROM plans p WHERE p.id=payments.plan_id AND p.tenant_id=payments.tenant_id);
+
+UPDATE subscriptions SET channel_snapshot=(SELECT p.channel_snapshot FROM payments p WHERE p.id=subscriptions.payment_id AND p.tenant_id=subscriptions.tenant_id);
+
+INSERT INTO subscription_history(id,created_at,updated_at,tenant_id,subscription_id,revision,actor_id,action,operation_key,before,after,reason) SELECT gen_random_uuid()::text,extract(epoch from clock_timestamp())::bigint,extract(epoch from clock_timestamp())::bigint,tenant_id,id,1,'migration','MIGRATED','migration:' || id,'{}'::json,json_build_object('status',status,'expires_at',expires_at,'starts_at',starts_at,'origin',origin,'plan_id',plan_id,'channels',channel_snapshot),'Imported from version 0004; previous audit records preserved' FROM subscriptions;
+
+INSERT INTO bot_admins(id,created_at,updated_at,tenant_id,bot_id,user_id,role,permissions,active) SELECT gen_random_uuid()::text,tm.created_at,tm.updated_at,tm.tenant_id,b.id,tm.user_id,CASE tm.role WHEN 'SUPERVISOR' THEN 'ADMIN' WHEN 'PAYMENTS' THEN 'FINANCE' ELSE tm.role END,'[]'::json,tm.active FROM tenant_members tm JOIN managed_bots b ON b.tenant_id=tm.tenant_id;
+
+INSERT INTO bot_payment_methods(id,created_at,updated_at,tenant_id,bot_id,provider,enabled,public_config,secrets_ciphertext,webhook_key) SELECT gen_random_uuid()::text,p.created_at,p.updated_at,p.tenant_id,b.id,p.provider,p.enabled,CASE WHEN p.provider='BANK_TRANSFER' THEN json_build_object('_legacy_provider_id',p.id,'currency',p.public_config->>'currency') ELSE '{}'::json END,p.secrets_ciphertext,gen_random_uuid()::text FROM payment_provider_configs p JOIN managed_bots b ON b.tenant_id=p.tenant_id WHERE p.provider IN ('TELEGRAM_STARS','BANK_TRANSFER');
+
+UPDATE jobs SET lane='interactive' WHERE kind='UPDATE' OR kind='SEND' AND dedup_key LIKE 'console:%';
+
+UPDATE provider_events SET status='DONE';
+
+INSERT INTO commission_entries(id,created_at,updated_at,tenant_id,cycle_id,charge_id,entry_key,currency,gross_minor,commission_bps,usd_rate,rate_source,entry_type) SELECT gen_random_uuid()::text,created_at,updated_at,tenant_id,NULL,id,'sale:' || id,currency,amount_minor,0,CASE WHEN currency='USD' THEN '1' ELSE NULL END,'legacy','TRIAL_OR_LEGACY' FROM payment_charges;
+
+INSERT INTO payment_refunds(id,created_at,updated_at,tenant_id,bot_id,charge_id,provider,reference,amount_minor,currency,actor_id,reason) SELECT gen_random_uuid()::text,refunded_at,refunded_at,tenant_id,bot_id,id,provider,'legacy:' || id,amount_minor,currency,'migration','Existing refund before version 0005' FROM payment_charges WHERE refunded_at IS NOT NULL;
+
+UPDATE campaigns SET status='PAUSED', cursor=CASE WHEN cursor='DONE' THEN 'DONE' ELSE 'SNAPSHOT' END WHERE status IN ('RUNNING','SCHEDULED','PAUSED');
+
+ALTER TABLE "connection_attempts" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "connection_attempts" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON connection_attempts USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "billing_cycles" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "billing_cycles" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON billing_cycles USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "bot_admins" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "bot_admins" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON bot_admins USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "bot_payment_methods" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "bot_payment_methods" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON bot_payment_methods USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "reports" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "reports" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON reports USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "platform_invoices" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "platform_invoices" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON platform_invoices USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "access_offers" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "access_offers" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON access_offers USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "invoice_adjustments" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "invoice_adjustments" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON invoice_adjustments USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "plan_channels" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "plan_channels" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON plan_channels USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "platform_settlements" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "platform_settlements" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON platform_settlements USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "access_redemptions" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "access_redemptions" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON access_redemptions USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "commission_entries" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "commission_entries" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON commission_entries USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "payment_refunds" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "payment_refunds" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON payment_refunds USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+ALTER TABLE "subscription_history" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "subscription_history" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON subscription_history USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+DO $$ BEGIN IF EXISTS (SELECT FROM pg_roles WHERE rolname='platform_api') THEN REVOKE ALL ON platform_settings FROM platform_api; END IF; END $$;
+
+UPDATE alembic_version SET version_num='0005' WHERE alembic_version.version_num = '0004';
+
 COMMIT;
 

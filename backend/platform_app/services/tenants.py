@@ -28,7 +28,7 @@ DEFAULT_LIMITS = {
 DEFAULT_FEATURES = {
     "bank_payments": True,
     "stars": True,
-    "external_payments": False,
+    "external_payments": True,
     "campaigns": True,
     "automations": True,
     "advanced_analytics": False,
@@ -43,6 +43,8 @@ DEFAULT_FEATURES = {
 
 
 def seed_saas_plans(session):
+    from .billing_ledger import TERMS
+
     for name, bots, contacts, campaigns, admins in [
         ("STARTER", 1, 1000, 5, 2),
         ("PRO", 3, 10000, 30, 5),
@@ -61,6 +63,8 @@ def seed_saas_plans(session):
                     },
                     features={**DEFAULT_FEATURES, "multiple_bots": bots > 1},
                     prices={},
+                    fixed_usd_minor=TERMS[name][0],
+                    commission_bps=TERMS[name][1],
                 )
             )
     session.flush()
@@ -69,16 +73,29 @@ def seed_saas_plans(session):
 def upsert_user(session, user):
     obj = session.scalar(select(PlatformUser).where(PlatformUser.telegram_user_id == user["id"]))
     if not obj:
-        obj = PlatformUser(
-            id=uid(), telegram_user_id=user["id"], first_name=user.get("first_name", "Creador")[:128]
+        from .common import insert_once
+        from .i18n import locale
+
+        obj, _ = insert_once(
+            session,
+            PlatformUser,
+            dict(
+                id=uid(),
+                telegram_user_id=user["id"],
+                first_name=user.get("first_name", "Creator")[:128],
+                locale=locale(user.get("language_code")),
+            ),
+            ["telegram_user_id"],
         )
-        session.add(obj)
-    obj.username, obj.first_name = user.get("username"), user.get("first_name", obj.first_name)[:128]
+    # Internal queued operations carry only an ID; they must not erase the profile.
+    if "first_name" in user:
+        obj.first_name = user["first_name"][:128]
+        obj.username = user.get("username")
     session.flush()
     return obj
 
 
-def create_tenant(session, user, name, settings):
+def create_tenant(session, user, name, settings, *, activate_trial=True):
     # Lock the global user row: repeated/concurrent onboarding cannot exceed owner quotas.
     session.scalar(select(PlatformUser).where(PlatformUser.id == user.id).with_for_update())
     count = session.scalar(select(func.count()).select_from(Tenant).where(Tenant.owner_user_id == user.id))
@@ -91,9 +108,21 @@ def create_tenant(session, user, name, settings):
     session.flush()
     session.add(TenantMember(tenant_id=tenant.id, user_id=user.id, role="OWNER"))
     session.add(Onboarding(tenant_id=tenant.id, user_id=user.id, step=1))
-    end = now() + settings.trial_days * 86400
+    start = now() if activate_trial and not user.trial_used_at else None
+    end = start + 3 * 86400 if start else now()
+    if start:
+        user.trial_used_at = start
+    tenant.status = "TRIAL" if start else "PAYMENT_PENDING"
     session.add(
-        SaaSSubscription(tenant_id=tenant.id, plan_id=plan.id, trial_ends_at=end, current_period_end=end)
+        SaaSSubscription(
+            tenant_id=tenant.id,
+            plan_id=plan.id,
+            trial_starts_at=start,
+            trial_ends_at=end,
+            current_period_end=end,
+            status="TRIAL" if start else "PAYMENT_PENDING",
+            grace_days=settings.billing_grace_days,
+        )
     )
     audit(session, tenant.id, user.id, "TENANT_CREATED", tenant.id)
     session.flush()
@@ -105,11 +134,41 @@ def entitlement(session, tenant_id, *, writable=True):
     sub = session.scalar(select(SaaSSubscription).where(SaaSSubscription.tenant_id == tenant_id))
     if not tenant or not sub:
         raise DomainError("TENANT_NOT_FOUND", "Espacio no disponible.", 404)
+    billing_lapsed = False
+    if writable and sub.cycle_started_at:
+        from ..models import PlatformInvoice
+
+        billing_lapsed = bool(
+            session.scalar(
+                select(PlatformInvoice.id)
+                .where(
+                    PlatformInvoice.tenant_id == tenant_id,
+                    PlatformInvoice.status.in_(["PAYMENT_PENDING", "OVERDUE"]),
+                    PlatformInvoice.due_at <= now(),
+                    PlatformInvoice.fixed_minor
+                    + PlatformInvoice.commission_minor
+                    + PlatformInvoice.adjustment_minor
+                    > PlatformInvoice.paid_minor,
+                )
+                .limit(1)
+            )
+        )
+        if sub.current_period_end + sub.grace_days * 86400 <= now():
+            awaiting_rate = session.scalar(
+                select(PlatformInvoice.id)
+                .where(PlatformInvoice.tenant_id == tenant_id, PlatformInvoice.status == "NEEDS_RATE")
+                .limit(1)
+            )
+            billing_lapsed = billing_lapsed or not awaiting_rate
     if writable and (
         tenant.deleted_at
+        or tenant.admin_suspended_at
+        or billing_lapsed
         or tenant.status in {"SUSPENDED", "CANCELLED"}
-        or sub.status not in {"TRIAL", "ACTIVE"}
-        or sub.current_period_end <= now()
+        or sub.status not in {"TRIAL", "ACTIVE", "PAYMENT_PENDING", "OVERDUE"}
+        or (sub.current_period_end <= now() and not sub.cycle_started_at)
+        or (sub.status == "TRIAL" and sub.trial_ends_at <= now())
+        or (sub.status in {"PAYMENT_PENDING", "OVERDUE"} and not sub.cycle_started_at)
     ):
         raise DomainError("SAAS_SUSPENDED", "Renueva tu plan de plataforma para continuar.", 403)
     plan = session.get(SaaSPlan, sub.plan_id)
@@ -153,10 +212,12 @@ def check_entity_limit(session, tenant_id, key, model):
 
 
 def suspend_due(session):
+    # Legacy Stars subscriptions only. Cycle billing handles its own grace period.
     rows = session.scalars(
         select(SaaSSubscription)
         .where(
             SaaSSubscription.current_period_end <= now(),
+            SaaSSubscription.cycle_started_at.is_(None),
             SaaSSubscription.status.in_(["TRIAL", "ACTIVE", "PAST_DUE"]),
         )
         .with_for_update(skip_locked=True)

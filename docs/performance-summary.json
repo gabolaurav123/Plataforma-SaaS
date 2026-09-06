@@ -1,0 +1,57 @@
+{
+  "baseline_commit": "2c37ad1b683f0bb6a0611d0b2ce8ebcde325f16d",
+  "baseline": {
+    "dataset": {
+      "tenants": 2,
+      "bots": 2,
+      "synthetic_extra_contacts": 10000
+    },
+    "scope": "Local Windows SQLite and mocked HTTP; excludes Telegram/network latency and Seenode capacity",
+    "results": {
+      "home": {
+        "samples": 30,
+        "median_ms": 11.49,
+        "p95_ms": 43.34,
+        "sql_statements": 6.0
+      },
+      "admin": {
+        "samples": 30,
+        "median_ms": 15.21,
+        "p95_ms": 17.33,
+        "sql_statements": 11.0
+      },
+      "http": {
+        "mock_calls": 100,
+        "client_instances": 100,
+        "total_ms": 24.8
+      }
+    }
+  },
+  "commercial_0005": {
+    "dataset": {
+      "tenants": 2,
+      "bots": 2,
+      "synthetic_extra_contacts": 10000
+    },
+    "scope": "Local Windows SQLite and mocked HTTP; excludes Telegram/network latency and Seenode capacity",
+    "results": {
+      "home": {
+        "samples": 30,
+        "median_ms": 11.9,
+        "p95_ms": 15.83,
+        "sql_statements": 7.0
+      },
+      "admin": {
+        "samples": 30,
+        "median_ms": 12.17,
+        "p95_ms": 18.05,
+        "sql_statements": 8.0
+      },
+      "http": {
+        "mock_calls": 100,
+        "client_instances": 1,
+        "total_ms": 21.05
+      }
+    }
+  }
+}

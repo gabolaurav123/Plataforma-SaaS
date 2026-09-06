@@ -69,25 +69,52 @@ def button_for(env, actor, action, **data):
 
 def test_new_creator_native_onboarding_without_mini_app(env):
     chat = Chat(env, 303).update("/start").click("Crear mi negocio").update("Nuevo club")
-    assert "Nuevo club" in chat.text
-    chat.click("Crear bot").update("Mi club").update("MiClubNuevo_bot")
-    markup = chat.jobs[0].payload["reply_markup"]
-    assert markup["keyboard"][0][0]["request_managed_bot"]["suggested_username"] == "MiClubNuevo_bot"
-    assert not any(method == "savePreparedKeyboardButton" for _, method, _ in env["fake"].calls)
+    assert "PAYMENT_PENDING" in chat.text
+    chat.click("Activar prueba gratuita")
+    assert "TRIAL" in chat.text and "3 días" in chat.text
+    chat.click("Conectar mi bot").update("880001:" + "X" * 35)
+    assert "comprobando" in chat.text
     with env["r"].db.system() as db:
-        assert db.scalar(select(m.BotCreationRequest).where(m.BotCreationRequest.telegram_user_id == 303))
-    assert "web_app" not in str(markup)
+        user = db.scalar(select(m.PlatformUser).where(m.PlatformUser.telegram_user_id == 303))
+        attempt = db.scalar(select(m.ConnectionAttempt).where(m.ConnectionAttempt.actor_id == user.id))
+        env["r"].connections.validate(db, attempt)
+        assert attempt.status == "VALIDATED"
+        callback = db.scalar(
+            select(m.ConsoleButton).where(
+                m.ConsoleButton.telegram_user_id == 303, m.ConsoleButton.action == "connect_confirm"
+            )
+        )
+        data = "ui:" + callback.id
+    chat.update(data=data)
+    with env["r"].db.system() as db:
+        bot = db.scalar(select(m.ManagedBot).where(m.ManagedBot.telegram_bot_id == 880001))
+        assert bot.connection_kind == "TOKEN"
+        bid = bot.id
+        secret = db.scalar(select(m.BotSecret).where(m.BotSecret.bot_id == bid))
+        assert "X" * 35 not in str(secret.token_ciphertext)
+    env["r"].provisioner.provision(bid)
+    admin = Chat(env, 303, bid).update("/start")
+    assert "Modo administrador" in admin.text
+    assert "web_app" not in str([j.payload for j in chat.jobs + admin.jobs])
+
+
+def delegated_chat(env):
+    Chat(env, 404).update("/start")
+    with env["r"].db.system() as db:
+        user = db.scalar(select(m.PlatformUser).where(m.PlatformUser.telegram_user_id == 404))
+        db.add(m.BotAdmin(tenant_id=env["tb"], bot_id=env["bb"], user_id=user.id, role="ADMIN"))
+    return Chat(env, 404, env["bb"]).update("/admin")
 
 
 def test_callbacks_bound_to_actor_private_chat_and_current_role(env):
-    chat = Chat(env).update("/start").click("Tenant B").click("child_1_bot")
-    config = chat.find("Nombre, textos")
-    attacker = Chat(env, 404).update(data=config)
+    chat = delegated_chat(env).click("⚙️ Configuración")
+    config = chat.find("Nombre, descripción")
+    attacker = Chat(env, 405, env["bb"]).update(data=config)
     assert "caducó" in attacker.text
     chat.update(data=config, private=False)
     assert not chat.jobs
     with env["r"].db.system() as db:
-        member = db.scalar(select(m.TenantMember).where(m.TenantMember.tenant_id == env["tb"]))
+        member = db.scalar(select(m.BotAdmin).where(m.BotAdmin.bot_id == env["bb"]))
         member.role = "READ_ONLY"
     chat.update(data=config)
     assert "Tu rol" in chat.text
@@ -100,43 +127,51 @@ def test_cross_tenant_and_owner_permissions_are_rechecked(env):
     chat.update("/admin")
     assert "Solo el administrador" in chat.text
     admin = Chat(env, 101).update("/admin")
-    assert "Negocios: 2" in admin.text
+    assert "Administración de la plataforma" in admin.text
     admin.click("Negocios y acceso").click("Tenant B").click("Abrir negocio")
     assert "Tenant B" in admin.text
 
 
 def test_dialog_survives_runtime_recreation_and_lost_permission(env):
-    chat = Chat(env).update("/start").click("Tenant B").click("child_1_bot")
-    chat.click("Nombre, textos").click("Descripción corta")
+    chat = (
+        delegated_chat(env).click("⚙️ Configuración").click("Nombre, descripción").click("Descripción corta")
+    )
     from platform_app.runtime import Runtime
 
-    chat.r = Runtime(env["r"].settings, env["fake"])
-    chat.update("La descripción nueva")
-    assert "Guardado" in chat.text
-    with env["r"].db.system() as db:
-        config = db.scalar(select(m.BotSettings).where(m.BotSettings.bot_id == env["bb"]))
-        assert config.short_description == "La descripción nueva"
-    chat.update(data=button_for(env, 202, "field", tid=env["tb"], id=env["bb"], field="name"))
-    with env["r"].db.system() as db:
-        db.scalar(select(m.TenantMember).where(m.TenantMember.tenant_id == env["tb"])).active = False
-    chat.update("No autorizado")
-    assert "No tienes acceso" in chat.text
-    with env["r"].db.system() as db:
-        assert db.get(m.ManagedBot, env["bb"]).name != "No autorizado"
+    fresh = Runtime(env["r"].settings, env["fake"])
+    chat.r = fresh
+    try:
+        chat.update("La descripción nueva")
+        assert "Guardado" in chat.text
+        with fresh.db.system() as db:
+            config = db.scalar(select(m.BotSettings).where(m.BotSettings.bot_id == env["bb"]))
+            assert config.short_description == "La descripción nueva"
+        chat.update("/admin").click("⚙️ Configuración").click("Nombre, descripción").click("Nombre")
+        with fresh.db.system() as db:
+            db.scalar(select(m.BotAdmin).where(m.BotAdmin.bot_id == env["bb"])).active = False
+        chat.update("No autorizado")
+        assert "acceso" in chat.text
+        with fresh.db.system() as db:
+            assert db.get(m.ManagedBot, env["bb"]).name != "No autorizado"
+            assert not db.scalar(select(m.Message.id).where(m.Message.text == "No autorizado"))
+    finally:
+        fresh.close()
 
 
 def test_native_plan_wizard_and_customer_checkout(env):
-    creator = Chat(env).update("/start").click("Tenant B").click("child_1_bot")
-    creator.click("Planes y precios").click("Crear plan").update("Club native")
-    creator.update("30").update("250").update("sí").click("Sin canal")
-    assert "Plan creado" in creator.text
+    creator = Chat(env, 202, env["bb"]).update("/admin").click("Planes").click("Crear").update("Club native")
+    creator.click("Añadir / editar precio").click("Telegram Stars").update("250")
+    creator.click("Renovación automática")
+    creator.click("Activar / desactivar")
     customer = Chat(env, 900002, env["bb"]).update("/start")
     assert "web_app" not in str([j.payload for j in customer.jobs])
-    customer.click("Ver planes").click("Club native").click("Aceptar condiciones")
-    assert "Revisa y confirma" in customer.text
+    customer.click("Ver planes").click("Club native").click("Stars")
+    assert "pago" in customer.text.lower()
     with env["r"].db.system() as db:
         pay = db.scalar(select(m.Payment).where(m.Payment.bot_id == env["bb"]))
         assert pay.amount_minor == 250 and pay.recurring and pay.status == "PENDING"
+        job = db.scalar(select(m.Job).where(m.Job.kind == "CHECKOUT", m.Job.bot_id == env["bb"]))
+        Worker(env["r"]).dispatch(db, job)
     assert any(method == "createInvoiceLink" for _, method, _ in env["fake"].calls)
 
 
@@ -449,6 +484,7 @@ def test_single_process_loop_receives_persists_and_replies(env):
 
         return Client()
 
+    env["r"].clients.close()
     env["r"].clients.factory = factory
 
     def run():

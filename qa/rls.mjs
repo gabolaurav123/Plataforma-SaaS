@@ -1,6 +1,10 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+process.on('uncaughtException', error => {
+  console.error(JSON.stringify({message:error.message, position:error.position, detail:error.detail}));
+  process.exit(1);
+});
 const db = new PGlite();
 await db.exec(await readFile(new URL('../docs/schema-postgres.sql', import.meta.url), 'utf8'));
 const { rows: [{ version }] } = await db.query('select version()');
@@ -8,7 +12,9 @@ await db.exec(`
   CREATE ROLE tenant_api_test NOLOGIN NOSUPERUSER NOBYPASSRLS;
   GRANT USAGE ON SCHEMA public TO tenant_api_test;
   GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO tenant_api_test;
-  REVOKE ALL ON console_states, console_buttons, poll_cursors, auth_sessions FROM tenant_api_test;
+  REVOKE ALL ON console_states, console_buttons, poll_cursors, auth_sessions, platform_settings FROM tenant_api_test;
+  REVOKE INSERT, UPDATE, DELETE ON billing_cycles, commission_entries, platform_invoices, platform_settlements, invoice_adjustments, payment_refunds, subscription_history FROM tenant_api_test;
+  REVOKE UPDATE, DELETE ON audit_logs FROM tenant_api_test;
   INSERT INTO platform_users(id,created_at,updated_at,telegram_user_id,first_name,locale) VALUES
     ('u-a',1,1,101,'A','es'),('u-b',1,1,202,'B','es');
   INSERT INTO tenants(id,created_at,updated_at,name,owner_user_id,status) VALUES
@@ -23,8 +29,15 @@ await db.exec(`
 `);
 const checks = [];
 async function check(name, fn) { await fn(); checks.push(name); }
+await check('Scoped API cannot rewrite commercial ledgers or audit records', async () => {
+  for (const table of ['billing_cycles','commission_entries','platform_invoices','platform_settlements','invoice_adjustments','payment_refunds','subscription_history','audit_logs']) {
+    await assert.rejects(db.query(`delete from ${table} where false`), /permission denied/);
+    await assert.rejects(db.query(`update ${table} set id=id where false`), /permission denied/);
+    if (table !== 'audit_logs') await assert.rejects(db.query(`insert into ${table} default values`), /permission denied/);
+  }
+});
 await check('API role cannot access private Telegram state or polling cursors', async () => {
-  for (const table of ['console_states', 'console_buttons', 'poll_cursors', 'auth_sessions']) {
+  for (const table of ['console_states', 'console_buttons', 'poll_cursors', 'auth_sessions', 'platform_settings']) {
     await assert.rejects(db.query(`select * from ${table}`), /permission denied/);
   }
 });

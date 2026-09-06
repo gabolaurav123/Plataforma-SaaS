@@ -134,7 +134,35 @@ def inspect_image(data: bytes, limit: int):
 
 
 ROLES = {
-    "OWNER": {"read", "configure", "payments", "sales", "support", "team", "export", "billing"},
+    "OWNER": {
+        "read",
+        "configure",
+        "payments",
+        "sales",
+        "support",
+        "team",
+        "export",
+        "billing",
+        "channels",
+        "payment_config",
+        "stats",
+        "subscriptions",
+    },
+    "ADMIN": {
+        "read",
+        "configure",
+        "payments",
+        "sales",
+        "support",
+        "team",
+        "export",
+        "channels",
+        "payment_config",
+        "stats",
+        "subscriptions",
+    },
+    "FINANCE": {"read", "payments", "stats", "export"},
+    "MODERATOR": {"read", "channels", "subscriptions"},
     "SUPERVISOR": {"read", "configure", "payments", "sales", "support", "export"},
     "PAYMENTS": {"read", "payments"},
     "SALES": {"read", "sales"},
@@ -144,5 +172,31 @@ ROLES = {
 
 
 def require_role(role, permission):
-    if permission not in ROLES.get(role, set()):
+    allowed = set(getattr(role, "permissions", ROLES.get(role, set())))
+    if permission not in allowed:
         raise DomainError("FORBIDDEN", "Tu rol no permite esta acción.", 403)
+
+
+class EffectiveRole(str):
+    def __new__(cls, name, permissions=None):
+        obj = super().__new__(cls, name)
+        obj.permissions = set(permissions if permissions is not None else ROLES.get(name, set()))
+        return obj
+
+
+def inspect_receipt(data, limit):
+    if data.startswith(b"%PDF-"):
+        if len(data) > limit or len(data) < 50 or b"%%EOF" not in data[-2048:]:
+            raise DomainError("UPLOAD_FORMAT", "El PDF está incompleto o supera el tamaño permitido.")
+        # Receipts are stored and delivered as attachments; they are never executed/rendered server-side.
+        if re.search(rb"/(?:JavaScript|JS|Launch|EmbeddedFile|OpenAction|AA|Encrypt)\b", data):
+            raise DomainError(
+                "UPLOAD_FORMAT", "Usa un PDF sin contraseña, archivos adjuntos ni acciones activas."
+            )
+        return {
+            "sha256": digest(data),
+            "perceptual_hash": None,
+            "bytes": data,
+            "media_type": "application/pdf",
+        }
+    return inspect_image(data, limit)

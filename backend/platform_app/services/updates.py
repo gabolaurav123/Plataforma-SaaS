@@ -26,6 +26,7 @@ class UpdateHandler:
             return
         if self.r.settings.deployment_mode == "telegram":
             from .console import handle
+
             return handle(self.r, session, update)
         if message.get("chat", {}).get("type") != "private" or not message.get("from"):
             return
@@ -131,6 +132,7 @@ class UpdateHandler:
             return
         if self.r.settings.deployment_mode == "telegram":
             from .console import handle
+
             return handle(self.r, session, update, bot)
         if (
             message.get("chat", {}).get("type") != "private"

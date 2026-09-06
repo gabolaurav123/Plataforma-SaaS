@@ -1,4 +1,4 @@
-from sqlalchemy import String, BigInteger, JSON, Boolean, UniqueConstraint
+from sqlalchemy import String, BigInteger, JSON, Boolean, UniqueConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base, Scoped, scoped_constraints, tenant_fk
 
@@ -6,7 +6,10 @@ from .base import Base, Scoped, scoped_constraints, tenant_fk
 class Contact(Scoped, Base):
     __tablename__ = "contacts"
     __table_args__ = scoped_constraints(
-        tenant_fk("bot_id", "managed_bots"), UniqueConstraint("bot_id", "telegram_user_id")
+        tenant_fk("bot_id", "managed_bots"),
+        UniqueConstraint("bot_id", "telegram_user_id"),
+        Index("ix_contact_bot_page", "bot_id", "id"),
+        Index("ix_contact_bot_created", "bot_id", "created_at"),
     )
     bot_id: Mapped[str] = mapped_column(String(36), index=True)
     telegram_user_id: Mapped[int] = mapped_column(BigInteger)
@@ -18,6 +21,7 @@ class Contact(Scoped, Base):
     referrer: Mapped[str | None] = mapped_column(String(36))
     last_seen_at: Mapped[int] = mapped_column(BigInteger)
     opted_out: Mapped[bool] = mapped_column(Boolean, default=False)
+    locale: Mapped[str] = mapped_column(String(8), default="es")
 
 
 class Conversation(Scoped, Base):
@@ -78,6 +82,10 @@ class Campaign(Scoped, Base):
     status: Mapped[str] = mapped_column(String(20), default="DRAFT")
     scheduled_at: Mapped[int | None] = mapped_column(BigInteger)
     cursor: Mapped[str | None] = mapped_column(String(36))
+    media: Mapped[dict] = mapped_column(JSON, default=dict)
+    buttons: Mapped[list] = mapped_column(JSON, default=list)
+    actor_id: Mapped[str | None] = mapped_column(String(36))
+    audience_count: Mapped[int] = mapped_column(default=0)
 
 
 class CampaignRecipient(Scoped, Base):

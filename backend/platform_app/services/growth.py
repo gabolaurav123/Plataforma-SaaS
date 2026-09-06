@@ -1,5 +1,5 @@
 from datetime import datetime, UTC
-from sqlalchemy import select
+from sqlalchemy import select, exists, cast, String, func, insert, literal
 from ..models import (
     CampaignRecipient,
     Contact,
@@ -11,6 +11,7 @@ from ..models import (
     CRMTask,
     TenantMember,
     PlatformUser,
+    Subscription,
     now,
     uid,
 )
@@ -34,7 +35,68 @@ ACTIONS = {"SEND_MESSAGE", "ADD_TAG", "CHANGE_CRM_STAGE", "NOTIFY_ADMIN", "CREAT
 
 
 class CampaignService:
+    def audience(self, campaign):
+        query = select(Contact).where(
+            Contact.tenant_id == campaign.tenant_id,
+            Contact.bot_id == campaign.bot_id,
+            Contact.opted_out.is_(False),
+            Contact.stage != "BLOCKED",
+        )
+        segment = campaign.segment or {}
+        kind = segment.get("kind", "all")
+        subs = select(Subscription.id).where(
+            Subscription.tenant_id == campaign.tenant_id,
+            Subscription.bot_id == campaign.bot_id,
+            Subscription.contact_id == Contact.id,
+        )
+        active = subs.where(Subscription.status == "ACTIVE", Subscription.expires_at > now())
+        if kind == "active":
+            query = query.where(exists(active))
+        elif kind == "without":
+            query = query.where(~exists(active))
+        elif kind == "expired":
+            query = query.where(exists(subs.where(Subscription.expires_at <= now())), ~exists(active))
+        elif kind == "plan":
+            query = query.where(exists(active.where(Subscription.plan_id == segment.get("plan_id"))))
+        elif kind == "channel":
+            query = query.where(
+                exists(
+                    active.where(
+                        cast(Subscription.channel_snapshot, String).like(
+                            '%"' + segment.get("channel_id", "") + '"%'
+                        )
+                    )
+                )
+            )
+        elif kind == "selected":
+            query = query.where(Contact.telegram_user_id.in_(segment.get("telegram_ids", [])))
+        elif kind == "tags":
+            query = query.where(
+                exists(
+                    select(ContactTag.id)
+                    .join(Tag, Tag.id == ContactTag.tag_id)
+                    .where(
+                        ContactTag.contact_id == Contact.id,
+                        Tag.tenant_id == campaign.tenant_id,
+                        Tag.name.in_(segment.get("tags", [])),
+                    )
+                )
+            )
+        elif kind != "all":
+            raise DomainError("INVALID_AUDIENCE", "Audiencia no disponible.")
+        if segment.get("stage"):
+            query = query.where(Contact.stage == segment["stage"])
+        if segment.get("source"):
+            query = query.where(Contact.source == segment["source"])
+        return query
+
+    def count(self, session, campaign):
+        return session.scalar(select(func.count()).select_from(self.audience(campaign).subquery())) or 0
+
     def start(self, session, campaign, when=None):
+        session.refresh(campaign, with_for_update=True)
+        if not campaign.text and not campaign.media:
+            raise DomainError("EMPTY_CAMPAIGN", "Añade contenido antes de enviar.")
         feature(session, campaign.tenant_id, "campaigns")
         if campaign.status not in {"DRAFT", "PAUSED", "SCHEDULED"}:
             raise DomainError("CAMPAIGN_STATE", "Esta campaña ya está en ejecución o finalizó.", 409)
@@ -55,61 +117,106 @@ class CampaignService:
         )
 
     def expand(self, session, campaign):
+        session.refresh(campaign, with_for_update=True)
         entitlement(session, campaign.tenant_id)
         if campaign.status in {"PAUSED", "COMPLETED"}:
             return
         campaign.status = "RUNNING"
-        query = select(Contact).where(
-            Contact.tenant_id == campaign.tenant_id,
-            Contact.bot_id == campaign.bot_id,
-            Contact.opted_out.is_(False),
-            Contact.stage != "BLOCKED",
-        )
-        if campaign.segment.get("stage"):
-            query = query.where(Contact.stage == campaign.segment["stage"])
-        if campaign.segment.get("source"):
-            query = query.where(Contact.source == campaign.segment["source"])
         if campaign.cursor == "DONE":
             return
-        if campaign.cursor:
-            query = query.where(Contact.id > campaign.cursor)
-        contacts = list(session.scalars(query.order_by(Contact.id).limit(100)))
-        for contact in contacts:
-            recipient = session.scalar(
-                select(CampaignRecipient).where(
-                    CampaignRecipient.campaign_id == campaign.id, CampaignRecipient.contact_id == contact.id
+        if not campaign.cursor:
+            # Materialize recipients once in SQL. Later subscription changes cannot grow
+            # this campaign or make its progress denominator drift.
+            ident = (
+                cast(func.gen_random_uuid(), String)
+                if session.bind.dialect.name == "postgresql"
+                else func.lower(func.hex(func.randomblob(16)))
+            )
+            audience = self.audience(campaign).with_only_columns(
+                ident,
+                literal(campaign.tenant_id),
+                literal(campaign.id),
+                Contact.id,
+                literal("PENDING"),
+                literal(now()),
+                literal(now()),
+            )
+            session.execute(
+                insert(CampaignRecipient).from_select(
+                    ["id", "tenant_id", "campaign_id", "contact_id", "status", "created_at", "updated_at"],
+                    audience,
                 )
             )
-            if not recipient:
-                recipient = CampaignRecipient(
-                    id=uid(), tenant_id=campaign.tenant_id, campaign_id=campaign.id, contact_id=contact.id
+            campaign.audience_count = session.scalar(
+                select(func.count())
+                .select_from(CampaignRecipient)
+                .where(CampaignRecipient.campaign_id == campaign.id)
+            )
+            campaign.cursor = "SNAPSHOT"
+        recipients = list(
+            session.scalars(
+                select(CampaignRecipient)
+                .where(CampaignRecipient.campaign_id == campaign.id, CampaignRecipient.status == "PENDING")
+                .order_by(CampaignRecipient.id)
+                .limit(100)
+            )
+        )
+        contacts = {
+            row.id: row
+            for row in session.scalars(
+                select(Contact).where(
+                    Contact.bot_id == campaign.bot_id,
+                    Contact.tenant_id == campaign.tenant_id,
+                    Contact.id.in_([row.contact_id for row in recipients]),
                 )
-                session.add(recipient)
+            )
+        }
+        for recipient in recipients:
+            contact = contacts.get(recipient.contact_id)
+            if contact:
+                recipient.status = "QUEUED"
                 enqueue(
                     session,
                     "SEND",
                     campaign.tenant_id,
                     {
                         "chat_id": contact.telegram_user_id,
-                        "text": render(campaign.text, {"first_name": contact.first_name}),
+                        "text": render(
+                            campaign.text,
+                            {
+                                "first_name": contact.first_name,
+                                "name": contact.first_name,
+                                "username": contact.username or "",
+                            },
+                        ),
+                        "media": campaign.media,
+                        "reply_markup": {"inline_keyboard": [[button] for button in campaign.buttons]}
+                        if campaign.buttons
+                        else None,
                         "recipient_id": recipient.id,
                     },
                     f"campaign-recipient:{campaign.id}:{contact.id}",
                     campaign.bot_id,
                 )
-        if len(contacts) == 100:
-            campaign.cursor = contacts[-1].id
+            else:
+                recipient.status = "SKIPPED"
+        if len(recipients) == 100:
             enqueue(
                 session,
                 "CAMPAIGN",
                 campaign.tenant_id,
                 {"campaign_id": campaign.id},
-                f"campaign-page:{campaign.id}:{campaign.cursor}",
+                f"campaign-page:{campaign.id}:{recipients[-1].id}",
                 campaign.bot_id,
             )
         else:
             campaign.cursor = "DONE"
-            if not contacts:
+            queued = session.scalar(
+                select(CampaignRecipient.id)
+                .where(CampaignRecipient.campaign_id == campaign.id, CampaignRecipient.status == "QUEUED")
+                .limit(1)
+            )
+            if not queued:
                 campaign.status = "COMPLETED"
 
 

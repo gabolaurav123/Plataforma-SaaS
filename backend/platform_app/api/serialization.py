@@ -14,6 +14,12 @@ PRIVATE_COLUMNS = {
     "payload",
     "dedup_key",
     "native_invite_link",
+    "sensitive_ciphertext",
+    "code_ciphertext",
+    "code_hash",
+    "reference_hash",
+    "content_ciphertext",
+    "payload_ciphertext",
 }
 MONEY_COLUMNS = {"amount_minor", "amount_xtr"}
 

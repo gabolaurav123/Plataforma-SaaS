@@ -219,7 +219,8 @@ def test_receipt_hash_review_and_approval(env, storage):
         first = env["r"].receipts.submit(db, bot, pay, data.getvalue())
         db.flush()
         second = env["r"].receipts.submit(db, bot, pay, data.getvalue())
-        assert not first.duplicate and second.duplicate
+        assert not first.duplicate and second.id == first.id
+        assert db.scalar(select(func.count()).select_from(m.BankReceipt)) == 1
         assert env["r"].receipts.read(first).startswith(b"\xff\xd8")
         env["r"].receipts.review(db, bot, first, env["ua"], "APPROVE")
         assert pay.status == "APPROVED"
@@ -262,11 +263,13 @@ def test_invalid_upload_rejected(env):
 
 def test_channel_permissions_and_personal_join_links(env):
     bot, contact, plan = bot_parts(env)
-    item = payment(env)
     with env["r"].db.system() as db:
         change = {"from": {"id": 101}, "chat": {"id": -100123, "type": "channel", "title": "Club"}}
         channel = env["r"].channels.connect_from_update(db, bot, change)
         db.get(m.Plan, plan.id).channel_id = channel.id
+        item = env["r"].payments.create(
+            db, bot, contact, plan.id, "TELEGRAM_STARS", "XTR", "channel-checkout"
+        )
         sub = env["r"].payments.confirm_stars(db, bot, contact.telegram_user_id, success_event(item))
         env["fake"].permissions = False
         assert "can_invite_users" in env["r"].channels.verify(db, bot, channel)["missing"]

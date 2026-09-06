@@ -14,7 +14,7 @@ class ChannelService:
     def connect_from_update(self, session, bot, change):
         # Being added by an arbitrary channel administrator cannot hijack a creator's bot.
         chat = change["chat"]
-        if chat["type"] != "channel":
+        if chat["type"] not in {"channel", "supergroup", "group"}:
             return None
         channel = session.scalar(
             select(Channel).where(Channel.bot_id == bot.id, Channel.telegram_chat_id == chat["id"])
@@ -45,6 +45,8 @@ class ChannelService:
         return channel
 
     def verify(self, session, bot, channel):
+        if channel.tenant_id != bot.tenant_id or channel.bot_id != bot.id:
+            raise DomainError("NOT_FOUND", "Canal no disponible.", 404)
         client = self.r.clients.child(session, bot)
         member = client.call("getChatMember", chat_id=channel.telegram_chat_id, user_id=bot.telegram_bot_id)
         settings = session.scalar(select(BotSettings).where(BotSettings.bot_id == bot.id))
@@ -60,13 +62,19 @@ class ChannelService:
             channel.connected_at = channel.connected_at or now()
         return {"connected": not missing, "missing": missing, "permissions": channel.permissions}
 
-    def grant(self, session, bot, subscription):
+    def grant(self, session, bot, subscription, channel_id=None):
         if subscription.status != "ACTIVE" or subscription.expires_at <= now():
             return
-        plan = session.get(Plan, subscription.plan_id)
-        if not plan.channel_id:
+        if subscription.bot_id != bot.id or subscription.tenant_id != bot.tenant_id:
+            raise DomainError("NOT_FOUND", "Suscripción no disponible.", 404)
+        ids = list(subscription.channel_snapshot)
+        if channel_id is None:
+            for cid in ids:
+                self.grant(session, bot, subscription, cid)
             return
-        channel = session.get(Channel, plan.channel_id)
+        if channel_id not in ids:
+            raise DomainError("ACCESS_NOT_INCLUDED", "Este canal no está incluido en la suscripción.", 403)
+        channel = session.get(Channel, channel_id)
         if channel.access_mode != "PLATFORM":
             return
         contact = session.get(Contact, subscription.contact_id)
@@ -75,6 +83,7 @@ class ChannelService:
         previous = session.scalar(
             select(ChannelInvite).where(
                 ChannelInvite.subscription_id == subscription.id,
+                ChannelInvite.channel_id == channel.id,
                 ChannelInvite.expires_at > now(),
                 ChannelInvite.revoked_at.is_(None),
                 ChannelInvite.used_at.is_(None),
@@ -105,13 +114,19 @@ class ChannelService:
                 expires_at=min(now() + 3600, subscription.expires_at),
             )
             session.add(previous)
+        from .texts import bot_text, customer_variables
+
+        values = customer_variables(session, bot, contact, subscription)
         send(
             session,
             bot,
             contact.telegram_user_id,
-            "✅ Tu membresía está activa. Solicita acceso con tu enlace personal:",
+            bot_text(session, bot, "ACCESS_GRANTED", locale=contact.locale, channel=channel.title, **values),
             f"access-message:{subscription.id}:{previous.id}",
-            reply_markup={"inline_keyboard": [[{"text": "Entrar al canal", "url": previous.invite_link}]]},
+            reply_markup={
+                "inline_keyboard": [[{"text": "📺 " + channel.title[:60], "url": previous.invite_link}]]
+            },
+            service_message=True,
         )
 
     def join_request(self, session, bot, update):
@@ -133,6 +148,9 @@ class ChannelService:
             invite
             and contact.telegram_user_id == update["from"]["id"]
             and sub.status == "ACTIVE"
+            and sub.bot_id == bot.id
+            and sub.tenant_id == bot.tenant_id
+            and channel.id in sub.channel_snapshot
             and sub.expires_at > now()
             and invite.expires_at > now()
             and not invite.revoked_at
@@ -152,27 +170,30 @@ class ChannelService:
             invite.revoked_at = now()
             emit(session, bot.tenant_id, "CHANNEL_ACCESS_GRANTED", f"join:{invite.id}", bot.id, contact.id)
 
-    def revoke(self, session, bot, subscription):
-        plan = session.get(Plan, subscription.plan_id)
-        if not plan.channel_id:
+    def revoke(self, session, bot, subscription, channel_id=None, channel_ids=None):
+        if subscription.bot_id != bot.id or subscription.tenant_id != bot.tenant_id:
+            raise DomainError("NOT_FOUND", "Suscripción no disponible.", 404)
+        if channel_id is None:
+            for cid in channel_ids if channel_ids is not None else subscription.channel_snapshot:
+                self.revoke(session, bot, subscription, cid)
             return
-        channel = session.get(Channel, plan.channel_id)
+        channel = session.get(Channel, channel_id)
+        if not channel or channel.bot_id != bot.id or channel.tenant_id != bot.tenant_id:
+            raise DomainError("NOT_FOUND", "Canal no disponible.", 404)
         settings = session.scalar(select(BotSettings).where(BotSettings.bot_id == bot.id))
         if channel.access_mode != "PLATFORM" or (settings and not settings.remove_expired_members):
             return
         # Another active entitlement for this channel must preserve access.
-        other = session.scalar(
-            select(Subscription.id)
-            .join(Plan, Plan.id == Subscription.plan_id)
-            .where(
+        active = session.scalars(
+            select(Subscription).where(
                 Subscription.tenant_id == bot.tenant_id,
                 Subscription.contact_id == subscription.contact_id,
                 Subscription.status == "ACTIVE",
                 Subscription.expires_at > now(),
-                Plan.channel_id == channel.id,
+                Subscription.bot_id == bot.id,
             )
         )
-        if other:
+        if any(channel.id in row.channel_snapshot for row in active):
             return
         contact = session.get(Contact, subscription.contact_id)
         client = self.r.clients.child(session, bot)
@@ -199,7 +220,7 @@ class ChannelService:
             session,
             bot.tenant_id,
             "CHANNEL_ACCESS_REVOKED",
-            f"revoke:{subscription.id}:{subscription.expires_at}",
+            f"revoke:{subscription.id}:{channel.id}:{subscription.expires_at}",
             bot.id,
             contact.id,
         )

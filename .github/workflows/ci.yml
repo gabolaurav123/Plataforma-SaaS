@@ -35,3 +35,4 @@ jobs:
         with: {node-version: '24'}
       - run: npm ci --prefix qa
       - run: npm run test:rls --prefix qa
+      - run: npm run test:migration --prefix qa

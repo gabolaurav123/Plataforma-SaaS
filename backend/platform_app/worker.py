@@ -1,8 +1,11 @@
 import logging
+import json
 import random
 import signal
 import time
-from sqlalchemy import select, func
+import base64
+from contextlib import nullcontext
+from sqlalchemy import select, func, text, exists, cast, String
 from .models import (
     Job,
     ManagedBot,
@@ -10,9 +13,6 @@ from .models import (
     Event,
     Subscription,
     Contact,
-    SaaSSubscription,
-    Tenant,
-    PlatformUser,
     Campaign,
     CampaignRecipient,
     AutomationExecution,
@@ -21,16 +21,17 @@ from .models import (
     uid,
 )
 from .runtime import Runtime
+from . import models as m
 from .errors import DomainError, RetryLater
 from .services.common import enqueue, emit, send, audit
-from .services.tenants import entitlement, suspend_due
+from .services.tenants import entitlement
 
 log = logging.getLogger("platform.worker")
 
 
 class Worker:
-    def __init__(self, runtime):
-        self.r, self.worker_id, self.cursor = runtime, uid(), None
+    def __init__(self, runtime, lane=None):
+        self.r, self.worker_id, self.cursor, self.lane = runtime, uid(), None, lane
 
     def claim(self):
         with self.r.db.system() as session:
@@ -50,6 +51,7 @@ class Worker:
                 session.execute(
                     select(Job.tenant_id, func.min(Job.run_at))
                     .where(Job.status == "PENDING", Job.run_at <= now())
+                    .where(Job.lane == self.lane if self.lane else True)
                     .group_by(Job.tenant_id)
                     .order_by(Job.tenant_id)
                     .limit(10001)
@@ -66,8 +68,9 @@ class Worker:
                     Job.status == "PENDING",
                     Job.run_at <= now(),
                     Job.tenant_id == key if key else Job.tenant_id.is_(None),
+                    Job.lane == self.lane if self.lane else True,
                 )
-                .order_by(Job.run_at, Job.created_at)
+                .order_by(Job.run_at, Job.sequence, Job.created_at, Job.id)
                 .with_for_update(skip_locked=True)
                 .limit(1)
             )
@@ -79,6 +82,7 @@ class Worker:
                 now() + self.r.settings.worker_lease_seconds,
             )
             job.attempts += 1
+            job.started_at = now()
             return job.id
 
     def mark_delivery(self, session, job, status, telegram_message_id=None):
@@ -102,8 +106,8 @@ class Worker:
 
     def process_send(self, session, job, bot):
         if bot:
-            entitlement(session, bot.tenant_id)
-            if bot.status in {"OWNERSHIP_CHANGED", "SUSPENDED"}:
+            entitlement(session, bot.tenant_id, writable=not job.payload.get("service_message"))
+            if bot.status in {"OWNERSHIP_CHANGED", "SUSPENDED", "DISCONNECTED"}:
                 raise DomainError("BOT_SUSPENDED", "Bot suspendido.", 403)
         recipient_id = job.payload.get("recipient_id")
         if recipient_id:
@@ -117,6 +121,12 @@ class Worker:
             if contact.opted_out or contact.stage == "BLOCKED":
                 self.mark_delivery(session, job, "SKIPPED")
                 return
+        if job.payload.get("admin_permission"):
+            from .services.background import admin_ui
+
+            if not bot or job.payload.get("viewer_id") != job.payload["chat_id"]:
+                raise DomainError("INVALID_VIEWER", "Acceso no permitido.", 403)
+            admin_ui(self.r, session, bot, job.payload["viewer_id"], job.payload["admin_permission"])
         self.r.limiter.outbound(job.bot_id or "master", job.tenant_id or "platform", job.payload["chat_id"])
         client = self.r.clients.child(session, bot) if bot else self.r.clients.master()
         if job.payload.get("receipt_id"):
@@ -125,26 +135,91 @@ class Worker:
 
             receipt = session.get(BankReceipt, job.payload["receipt_id"])
             viewer = job.payload["viewer_id"]
-            if viewer != job.payload["chat_id"] or bot:
+            if not receipt or viewer != job.payload["chat_id"]:
                 raise DomainError("INVALID_RECEIPT_VIEWER", "Acceso no permitido.", 403)
-            ui = Console(self.r, session, None, {"update_id": 0}, {"id": viewer})
-            ui.ctx(receipt.tenant_id, "payments")
+            ui = Console(self.r, session, bot, {"update_id": 0}, {"id": viewer})
+            ui.entity(BankReceipt, receipt.tenant_id, receipt.id, "payments")
+            is_pdf = receipt.media_type == "application/pdf"
             result = client.call(
-                "sendPhoto",
+                "sendDocument" if is_pdf else "sendPhoto",
                 chat_id=viewer,
                 caption=job.payload["caption"],
-                files={"photo": ("comprobante.jpg", self.r.receipts.read(receipt), "image/jpeg")},
+                files={
+                    "document" if is_pdf else "photo": (
+                        "comprobante.pdf" if is_pdf else "comprobante.jpg",
+                        self.r.receipts.read(receipt),
+                        receipt.media_type,
+                    )
+                },
             )
             audit(session, receipt.tenant_id, ui.user.id, "TELEGRAM_RECEIPT_VIEWED", receipt.id)
             return
+        if job.payload.get("platform_receipt_id"):
+            viewer = job.payload.get("viewer_id")
+            if bot or viewer != job.payload["chat_id"] or viewer not in self.r.settings.owner_ids:
+                raise DomainError("OWNER_REQUIRED", "Acceso no permitido.", 403)
+            receipt = session.get(m.PlatformSettlement, job.payload["platform_receipt_id"])
+            data = base64.b64decode(
+                self.r.vault.decrypt(
+                    receipt.receipt_ciphertext, f"{receipt.tenant_id}:{receipt.id}:platform-receipt"
+                )
+            )
+            client.call(
+                "sendDocument",
+                chat_id=viewer,
+                files={
+                    "document": (
+                        "comprobante.pdf" if receipt.media_type == "application/pdf" else "comprobante.jpg",
+                        data,
+                        receipt.media_type,
+                    )
+                },
+            )
+            audit(session, receipt.tenant_id, str(viewer), "PLATFORM_RECEIPT_VIEWED", receipt.id)
+            return
+        if job.payload.get("report_id"):
+            from .services.background import admin_ui
+
+            viewer = job.payload["viewer_id"]
+            if not bot or viewer != job.payload["chat_id"]:
+                raise DomainError("INVALID_VIEWER", "Acceso no permitido.", 403)
+            ui = admin_ui(self.r, session, bot, viewer, "export")
+            report = ui.entity(m.Report, bot.tenant_id, job.payload["report_id"], "export")
+            client.call(
+                "sendDocument",
+                chat_id=viewer,
+                caption=job.payload.get("text", "Reporte CSV"),
+                files={
+                    "document": ("reporte-" + report.id[:8] + ".csv", self.r.reports.read(report), "text/csv")
+                },
+            )
+            audit(session, bot.tenant_id, ui.user.id, "REPORT_DOWNLOADED", report.id)
+            return
         params = {k: v for k, v in job.payload.items() if k in {"chat_id", "text", "reply_markup"}}
-        result = client.call("sendMessage", **params)
-        self.mark_delivery(session, job, "SENT", result.get("message_id"))
+        media = job.payload.get("media")
+        if media:
+            kind = media.get("kind")
+            if kind not in {"photo", "video", "document"}:
+                raise DomainError("INVALID_MEDIA", "Tipo de archivo no permitido.")
+            params["caption"] = params.pop("text", "")[:1024]
+            params[kind] = media["file_id"]
+            result = client.call(
+                {"photo": "sendPhoto", "video": "sendVideo", "document": "sendDocument"}[kind], **params
+            )
+        else:
+            result = client.call("sendMessage", **params)
+        self.mark_delivery(
+            session, job, "SENT", result.get("message_id") if isinstance(result, dict) else None
+        )
         audit(session, job.tenant_id, "worker", "MESSAGE_SENT", job.id)
 
     def tick(self, session):
         self.r.payments.expire_due(session)
+        self.r.ledger.tick(session)
+        from .services.tenants import suspend_due
+
         suspend_due(session)
+        enqueue(session, "SUMMARY_SCAN", None, {"batch": now() // 3600}, f"summary-scan:{now() // 3600}")
         if self.r.settings.deployment_mode != "telegram":
             enqueue(session, "HEALTH_SCAN", None, {"bucket": now() // 900}, f"health-scan:{now() // 900}")
         for sub in session.scalars(
@@ -153,6 +228,13 @@ class Worker:
                 Subscription.status == "ACTIVE",
                 Subscription.expires_at > now(),
                 Subscription.expires_at <= now() + 3 * 86400,
+                ~exists(
+                    select(Event.id).where(
+                        Event.tenant_id == Subscription.tenant_id,
+                        Event.dedup_key
+                        == "expiring:" + Subscription.id + ":" + cast(Subscription.expires_at, String),
+                    )
+                ),
             )
             .limit(1000)
         ):
@@ -164,43 +246,81 @@ class Worker:
                 sub.bot_id,
                 sub.contact_id,
             )
-        for sub in session.scalars(
-            select(SaaSSubscription)
-            .where(
-                SaaSSubscription.status == "TRIAL",
-                SaaSSubscription.trial_ends_at.between(now(), now() + 86400),
-            )
-            .limit(1000)
-        ):
-            tenant = session.get(Tenant, sub.tenant_id)
-            user = session.get(PlatformUser, tenant.owner_user_id)
-            send(
+            from .services.notifications import customer
+
+            customer(
                 session,
-                None,
-                user.telegram_user_id,
-                "Tu prueba termina en menos de 24 horas. Abre Facturación para continuar.",
-                f"trial-reminder:{sub.id}",
+                session.get(ManagedBot, sub.bot_id),
+                session.get(Contact, sub.contact_id),
+                "SUBSCRIPTION_EXPIRING",
+                f"expiry-reminder:{sub.id}:{sub.expires_at}",
+                sub,
             )
 
     def dispatch(self, session, job):
+        from .services.background import KINDS, process
+
+        if job.stream_key:
+            if session.bind.dialect.name == "postgresql" and not session.scalar(
+                text("SELECT pg_try_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": job.stream_key}
+            ):
+                raise RetryLater(1, "STREAM_BUSY")
+            earlier = session.scalar(
+                select(Job.id)
+                .where(
+                    Job.stream_key == job.stream_key,
+                    Job.sequence < job.sequence,
+                    Job.status.in_(["PENDING", "RUNNING"]),
+                    Job.id != job.id,
+                )
+                .limit(1)
+            )
+            if earlier:
+                raise RetryLater(1, "STREAM_ORDER")
         bot = session.get(ManagedBot, job.bot_id) if job.bot_id else None
-        if job.kind == "UPDATE":
+        if job.kind in KINDS:
+            process(self.r, session, job, bot)
+        elif job.kind == "UPDATE":
             update = session.get(TelegramUpdate, job.payload["update_id"])
             if update.status == "DONE":
                 return
+            payload = (
+                json.loads(
+                    self.r.vault.decrypt(
+                        update.sensitive_ciphertext, f"transport:{update.bot_key}:{update.update_id}"
+                    )
+                )
+                if update.sensitive_ciphertext
+                else update.payload
+            )
             if bot:
-                self.r.updates.child(session, bot, update.payload)
+                self.r.updates.child(session, bot, payload)
             else:
-                self.r.updates.master(session, update.payload)
+                self.r.updates.master(session, payload)
             update.status = "DONE"
+            update.sensitive_ciphertext = None
         elif job.kind == "SEND":
             self.process_send(session, job, bot)
+        elif job.kind == "VALIDATE_CONNECTION":
+            from .models import ConnectionAttempt
+
+            attempt = session.get(ConnectionAttempt, job.payload["attempt_id"])
+            if attempt and attempt.tenant_id == job.tenant_id:
+                self.r.connections.validate(session, attempt)
         elif job.kind in {"GRANT_ACCESS", "REVOKE_ACCESS"}:
             sub = session.get(Subscription, job.payload["subscription_id"])
             if sub and sub.bot_id == bot.id and sub.tenant_id == bot.tenant_id:
-                (self.r.channels.grant if job.kind == "GRANT_ACCESS" else self.r.channels.revoke)(
-                    session, bot, sub
-                )
+                channels = job.payload.get("channel_ids", sub.channel_snapshot)
+                for cid in channels:
+                    kind = "GRANT_CHANNEL" if job.kind == "GRANT_ACCESS" else "REVOKE_CHANNEL"
+                    enqueue(
+                        session,
+                        kind,
+                        bot.tenant_id,
+                        {"subscription_id": sub.id, "channel_id": cid},
+                        f"access-channel:{job.id}:{cid}",
+                        bot.id,
+                    )
         elif job.kind == "EVENT":
             self.r.automations.consume(session, session.get(Event, job.payload["event_id"]))
         elif job.kind == "AUTOMATION":
@@ -217,10 +337,19 @@ class Worker:
             )
             bot.status, bot.last_error_code = "READY", None
         elif job.kind == "HEALTH":
-            if bot and bot.status not in {"OWNERSHIP_CHANGED", "SUSPENDED"}:
+            if bot and bot.status not in {
+                "OWNERSHIP_CHANGED",
+                "SUSPENDED",
+                "DISCONNECTED",
+                "CONNECTION_ERROR",
+            }:
                 self.r.provisioner.health(session, bot, repair=True)
         elif job.kind == "HEALTH_SCAN":
-            query = select(ManagedBot).where(ManagedBot.status.not_in(["OWNERSHIP_CHANGED", "SUSPENDED"]))
+            query = select(ManagedBot).where(
+                ManagedBot.status.not_in(
+                    ["OWNERSHIP_CHANGED", "SUSPENDED", "DISCONNECTED", "CONNECTION_ERROR"]
+                )
+            )
             cursor, bucket = job.payload.get("after"), job.payload["bucket"]
             if cursor:
                 query = query.where(ManagedBot.id > cursor)
@@ -249,24 +378,27 @@ class Worker:
             raise DomainError("UNKNOWN_JOB", "Tipo de trabajo no soportado.")
 
     def run_one(self):
+        with self.r.claim_lock if self.r.db.system_engine.dialect.name == "sqlite" else nullcontext():
+            return self._run_one()
+
+    def _run_one(self):
         job_id = self.claim()
         if not job_id:
             return False
         try:
             with self.r.db.system() as session:
-                job = session.get(Job, job_id)
-                provision = job.kind == "PROVISION"
-                bot_id, rotate = job.bot_id, job.payload.get("rotate", False) and job.attempts == 1
-            if provision:
-                self.r.provisioner.provision(bot_id, rotate=rotate)
-                with self.r.db.system() as session:
-                    job = session.get(Job, job_id)
-                    job.status = "DONE"
-            else:
-                with self.r.db.system() as session:
-                    job = session.get(Job, job_id)
+                # Keep the job row locked throughout remote provisioning too. A lease
+                # timeout cannot give the same active job to a second worker.
+                job = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
+                if job.status != "RUNNING" or job.lease_owner != self.worker_id:
+                    return True
+                if job.kind == "PROVISION":
+                    self.r.provisioner.provision(
+                        job.bot_id, rotate=job.payload.get("rotate", False) and job.attempts == 1
+                    )
+                else:
                     self.dispatch(session, job)
-                    job.status = "DONE"
+                job.status = "DONE"
         except RetryLater as error:
             with self.r.db.system() as session:
                 job = session.get(Job, job_id)
@@ -291,9 +423,62 @@ class Worker:
                 job.run_at = now() + min(3600, 2**job.attempts + random.randint(0, 3))
                 if job.status in {"FAILED", "DELIVERY_UNKNOWN"}:
                     self.mark_delivery(session, job, job.status)
+                    viewer, language = job.payload.get("viewer_id"), "es"
+                    if job.kind == "UPDATE":
+                        update = session.get(m.TelegramUpdate, job.payload["update_id"])
+                        if update:
+                            update.status = "FAILED"
+                    if job.kind == "PROVIDER_EVENT":
+                        event = session.get(m.ProviderEvent, job.payload["event_id"])
+                        if event:
+                            event.status = "FAILED"
+                    if job.kind == "CHECKOUT":
+                        payment = session.get(m.Payment, job.payload["payment_id"])
+                        person = session.get(Contact, payment.contact_id) if payment else None
+                        if person:
+                            viewer, language = person.telegram_user_id, person.locale
+                    if job.kind == "REPORT":
+                        report = session.get(m.Report, job.payload["report_id"])
+                        if report:
+                            report.status = "FAILED"
+                            actor = session.get(m.PlatformUser, report.actor_id)
+                            viewer, language = actor.telegram_user_id, actor.locale
+                    if job.kind not in {"SEND", "UPDATE", "DELETE_MESSAGE"} and viewer:
+                        target = session.get(ManagedBot, job.bot_id) if job.bot_id else None
+                        from .services.i18n import t
+
+                        send(
+                            session,
+                            target,
+                            viewer,
+                            t("operation_failed", language),
+                            "job-error:" + job.id,
+                            service_message=True,
+                        )
+                if code == "TELEGRAM_FORBIDDEN" and job.kind == "SEND" and job.bot_id:
+                    person = session.scalar(
+                        select(Contact).where(
+                            Contact.bot_id == job.bot_id,
+                            Contact.telegram_user_id == job.payload.get("chat_id"),
+                        )
+                    )
+                    if person:
+                        person.stage = "BLOCKED"
+                    self.mark_delivery(session, job, "BLOCKED")
                 if job.bot_id and code in {"TOKEN_INVALID", "TELEGRAM_FORBIDDEN"}:
                     session.get(ManagedBot, job.bot_id).last_error_code = code
-                    if code == "TOKEN_INVALID" and job.kind != "PROVISION":
+                    target = session.get(ManagedBot, job.bot_id)
+                    if code == "TOKEN_INVALID" and target.connection_kind == "TOKEN":
+                        target.status = "CONNECTION_ERROR"
+                        session.info["bots_changed"] = True
+                        send(
+                            session,
+                            None,
+                            target.owner_telegram_user_id,
+                            f"⚠️ @{target.username}: el token ya no es válido. Reemplázalo desde Conexión en tu cuenta SaaS.",
+                            f"token-invalid:{target.id}:{target.config_version}",
+                        )
+                    elif code == "TOKEN_INVALID" and job.kind != "PROVISION":
                         enqueue(
                             session,
                             "PROVISION",

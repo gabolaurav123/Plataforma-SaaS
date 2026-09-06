@@ -1,4 +1,6 @@
 import hmac
+import json
+from copy import deepcopy
 from fastapi import APIRouter, Request, Depends
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy import select
@@ -34,6 +36,8 @@ def ingest(public_id, header, update, r):
             valid = bool(secret) and hmac.compare_digest(secret.webhook_secret_hash, digest(header))
         if not valid:
             raise DomainError("INVALID_WEBHOOK", "Webhook no autorizado.", 403)
+        if bot and bot.status in {"DISCONNECTED", "OWNERSHIP_CHANGED"}:
+            return {"ok": True, "disconnected": True}
         bot_id, tenant_id = (bot.id, bot.tenant_id) if bot else (None, None)
     return store_update(bot_id, tenant_id, update, r)
 
@@ -57,7 +61,7 @@ def store_update(bot_id, tenant_id, update, r, *, polling=False):
                 if not cursor:
                     cursor = PollCursor(bot_key=bot_key, next_offset=0)
                     session.add(cursor)
-                cursor.next_offset = update["update_id"] + 1
+                cursor.next_offset = max(cursor.next_offset or 0, update["update_id"] + 1)
             existing = session.scalar(
                 select(TelegramUpdate.id).where(
                     TelegramUpdate.bot_key == bot_key, TelegramUpdate.update_id == update["update_id"]
@@ -65,8 +69,22 @@ def store_update(bot_id, tenant_id, update, r, *, polling=False):
             )
             if existing:
                 return {"ok": True, "duplicate": True}
+            safe_update, encrypted = deepcopy(update), None
+            message = update.get("message", {})
+            if message.get("chat", {}).get("type") == "private" and (
+                message.get("text") or message.get("caption")
+            ):
+                encrypted = r.vault.encrypt(json.dumps(update), f"transport:{bot_key}:{update['update_id']}")
+                for key in ("text", "caption"):
+                    if key in safe_update["message"]:
+                        safe_update["message"][key] = "[ENCRYPTED]"
             stored = TelegramUpdate(
-                id=uid(), bot_key=bot_key, tenant_id=tenant_id, update_id=update["update_id"], payload=update
+                id=uid(),
+                bot_key=bot_key,
+                tenant_id=tenant_id,
+                update_id=update["update_id"],
+                payload=safe_update,
+                sensitive_ciphertext=encrypted,
             )
             session.add(stored)
             session.flush()
@@ -94,6 +112,8 @@ def store_update(bot_id, tenant_id, update, r, *, polling=False):
                     {"update_id": stored.id},
                     f"update:{bot_key}:{update['update_id']}",
                     bot_id,
+                    stream_key=f"{bot_key}:{(update.get('callback_query', {}).get('from') or message.get('from') or {}).get('id', 'service')}",
+                    sequence=update["update_id"] * 100,
                 )
         return {"ok": True}
     except IntegrityError:

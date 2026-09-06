@@ -1,41 +1,46 @@
-# Guía de los menús de Telegram
+# Uso de la plataforma desde Telegram
 
-## Creador
+## Bot maestro: @Subscriptionwbot
 
-`/start → Crear mi negocio → nombre → Crear bot → nombre y usuario → Crear mi bot`.
+`/start` muestra los espacios del propietario, crear un negocio, idioma y ayuda. `/admin` solo está disponible para los IDs configurados como propietarios de la plataforma. La identidad se basa en el ID numérico, nunca en el nombre de usuario.
 
-El botón abre el mecanismo oficial de Telegram para crear un bot administrado. Al terminar, vuelve al Master con `/start`. La conexión se prepara automáticamente y recibes un aviso. Si BotFather no habilitó Bot Management Mode, se indica el requisito.
+Para comenzar: **Crear mi negocio → Activar prueba gratuita → Conectar mi bot**. La prueba dura tres días y solo se utiliza una vez por propietario. Un segundo espacio no reinicia el beneficio.
 
-Desde el negocio puedes abrir tus bots, estadísticas, plan SaaS, clientes, membresías, pagos, comprobantes, conversaciones, equipo, campañas, automatizaciones y otros registros. Los listados tienen paginación. Los permisos de cada acción dependen del rol.
+El creador obtiene un token de su bot en BotFather y lo envía en el diálogo privado indicado. El sistema consulta su identidad, muestra usuario e ID y pide confirmar antes de tomar el control. El token se cifra, se retira de la carga persistida de mensajes y se solicita borrar el mensaje de Telegram; Telegram puede impedir el borrado fuera de su ventana. No se garantiza borrar copias previas del historial del usuario.
 
-En cada bot:
+Un bot ya vinculado a otro negocio no puede apropiarse mediante este formulario. Cambiar token, desconectar y reemplazar son operaciones auditadas; los registros históricos se conservan. El modo Managed Bots anterior sigue siendo compatible, pero la conexión principal usa el token del bot del cliente.
 
-- **Nombre, textos y políticas:** cambia un dato por mensaje. Los asistentes se conservan durante 24 horas; `/cancel` los descarta.
-- **Foto de perfil:** envía una imagen; se normaliza y se actualiza en el bot hijo.
-- **Conectar canal:** usa el enlace de Telegram, concede permisos y pulsa Verificar canales. El propietario del bot debe añadirlo al canal.
-- **Planes y precios:** indica nombre, duración, precio, renovación y canal. Se habilita Stars al crear el plan. Después puedes cambiar el precio o desactivar el plan. Las membresías y pagos ya iniciados conservan sus condiciones.
-- **Comprobar y publicar:** verifica conexión, textos, plan, cobro, canal y políticas. Primero debes iniciar una conversación con el bot hijo para que pueda enviarte la prueba.
-- **Campaña:** escribe el mensaje para guardar un borrador; inicia y confirma el envío desde el registro. Respeta las bajas con `/stop` y los límites de cada plan.
-- **Automatización:** esta interfaz permite crear recordatorios de vencimiento y activarlos/desactivarlos. El constructor avanzado del modo web queda aplazado.
+**Mi plan SaaS** entrega un resumen en segundo plano: periodo, tarifa, ventas y devoluciones por moneda, comisión, facturas, saldo, bots, contactos, administradores, difusiones y exportaciones utilizadas. Los límites de difusión y exportación se renuevan por mes calendario UTC; la facturación usa ciclos de 30 días.
 
-En Conversaciones puedes leer mensajes y responder desde el bot correspondiente. En Clientes puedes añadir notas internas. En Equipo puedes asignar SUPERVISOR, PAYMENTS, SALES, SUPPORT o READ_ONLY a una persona que haya iniciado el Master. El propietario no se puede retirar con este menú.
+## Bot del negocio
 
-Los comprobantes corresponden a pedidos externos previamente registrados; pueden visualizarse y revisarse desde Telegram. Esta versión no inicia ventas digitales por transferencia dentro del bot: los cobros digitales de Telegram usan Stars. Las integraciones externas y sus formularios quedan aplazados.
+Su propietario abre `/start` o `/admin` y recibe el panel de administración. Las cuentas del equipo reciben las opciones permitidas por su rol. **Ver como usuario** abre el flujo de compra, con un botón para regresar al panel.
+
+Configuración inicial:
+
+1. Revisar nombre, descripciones, soporte y políticas del negocio.
+2. Añadir el bot como administrador del canal/grupo y verificar permisos para invitar y restringir miembros.
+3. Crear un plan, fijar duración, precios y canales incluidos; activar el plan.
+4. Configurar el método de pago apropiado al producto. Telegram exige Stars para contenido/acceso digital comprado dentro de Telegram.
+5. Revisar los mensajes, elegir idioma, zona horaria y formato de fecha.
+6. Comprobar y publicar. La publicación verifica requisitos reales.
+
+Planes permite modificar, duplicar y archivar. Cada compra conserva su precio y sus canales, aunque el plan cambie después. Las suscripciones tienen historial de concesión, extensión, cancelación, reactivación y cambio de plan. Una concesión gratuita no crea pagos ficticios.
+
+Usuarios permite buscar por ID, nombre o usuario y filtrar por estado, vencimiento, plan o historial de compra; incluye notas, etiquetas y operaciones sobre suscripciones. Marcar una etiqueta `VIP` puede generar la alerta habilitada en notificaciones.
+
+Invitaciones genera enlaces con plan, duración, canales, caducidad, límite de usos y nota. La reutilización por la misma persona no concede días adicionales. Su historial muestra quién usó el enlace. El origen de la suscripción es `invite_link`.
+
+Difusiones incluye texto, imagen, video o documento y hasta cuatro botones HTTPS. Se elige audiencia, se revisa la vista previa y se confirma. La audiencia se guarda al comenzar; después puede pausarse o reanudarse. Los contadores reflejan enviados, fallidos, bloqueados y entregas inciertas. Telegram no proporciona lecturas individuales.
+
+Mensajes permite personalizar cada idioma y restaurar los valores originales. Variables: `{name}`, `{username}`, `{plan}`, `{price}`, `{currency}`, `{expiration_date}`, `{days_remaining}`, `{channel}`, `{bot_name}`. No se ejecuta código dentro de las plantillas.
+
+Reportes genera CSV privado con operaciones y referencias reales, por fechas y moneda. El archivo cifrado caduca a los siete días. Los resúmenes diario, semanal y mensual se habilitan en notificaciones y respetan la zona horaria del negocio.
 
 ## Propietario de la plataforma
 
-Solo los IDs de `PLATFORM_OWNER_IDS` pueden entrar a `/admin` o ver Administrar plataforma.
+`/admin` ofrece resumen, negocios, usuarios, bots, colas, soporte, auditoría y pagos SaaS. Puede configurar cuotas USD, porcentaje de comisión, periodo de tolerancia, conversiones y métodos de cobro de la plataforma.
 
-El administrador consulta cifras globales, negocios, usuarios, bots, cola, errores, auditoría, soporte y precios SaaS. Puede abrir cualquier negocio con acceso administrativo auditado, suspenderlo o conceder días de acceso sin cobro. Suspensiones, concesión de días, campañas y reembolsos presentan una confirmación antes de aplicarse.
+Una extensión gratuita no inventa ingresos: amplía el ciclo sin una cuota fija adicional, mantiene la comisión de ventas y registra el motivo. Las deudas pendientes deben resolverse mediante pagos o ajustes explícitos. Una suspensión administrativa no se levanta automáticamente por un pago.
 
-No se muestran tokens ni claves. El acceso se determina por ID numérico y permisos actuales, no por el @usuario ni por ocultar botones. Un botón de otra persona, otro bot, caducado o ya utilizado no ejecuta acciones.
-
-## Cliente
-
-En el bot del creador: `/start → Ver planes → plan → políticas → continuar → pago en Stars`. Telegram pide la confirmación de pago. Después de confirmar el cobro, se registra la membresía y se facilita acceso al canal con un enlace individual.
-
-En **Mi membresía** se ven vigencia, acceso y renovación automática. Soporte permite escribir al equipo o abrir el usuario de contacto. `/stop` desactiva campañas y `/start` vuelve a habilitarlas.
-
-## Alcance de esta fase
-
-El funcionamiento se prueba con Telegram simulado y PostgreSQL; todavía debe verificarse con el nuevo Master real. La web existente se conserva para después y no forma parte del despliegue actual. Los listados permiten consultar los registros existentes; las funciones avanzadas de segmentación, edición general de automatizaciones, cupones e integraciones de pago externas no se presentan como implementadas en estos asistentes.
+Transferencia y cripto se configuran en **Pagos SaaS → Métodos de cobro**. Allí se guardan banco, titular, cuenta y moneda, o activo, red y dirección pública. Nunca se necesitan claves privadas de una cartera. El cliente presenta la referencia y el comprobante; el propietario verifica el ingreso antes de aprobar.

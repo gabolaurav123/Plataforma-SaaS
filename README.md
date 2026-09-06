@@ -1,26 +1,32 @@
-# Creator Engine · Todo desde Telegram
+# Plataforma SaaS · Administración desde Telegram
 
-La versión actual funciona con **un único Worker de Seenode + PostgreSQL en Neon**. Creadores, clientes y administrador operan mediante botones y mensajes de Telegram. No necesita web, Mini App, Redis, dominio ni puerto público.
+Un bot maestro para las cuentas y la facturación de la plataforma. Cada cliente conecta su propio bot mediante BotFather y administra su negocio **desde ese bot**. El despliegue utiliza un Worker de Seenode y la base Neon existente.
 
-**[Configuración exacta de Seenode](docs/seenode.md)** · **[Uso de los menús](docs/telegram.md)**
+**[Despliegue](docs/seenode.md)** · **[Uso desde Telegram](docs/telegram.md)** · **[Facturación](docs/facturacion.md)** · **[Arquitectura](docs/arquitectura.md)** · **[Pruebas](docs/pruebas.md)**
 
-Es un proyecto independiente. El servicio y repositorio `telegram-saas-bot` quedan fuera de este despliegue.
+## Funciones
 
-## Qué puedes hacer desde Telegram
+- Prueba de tres días, activada expresamente una vez por propietario; conexiones de bots con validación, confirmación, cifrado, sustitución y desconexión.
+- Panel del negocio con planes, precios, canales, suscripciones, CRM, comprobantes, invitaciones gratuitas, campañas, mensajes, equipo y reportes CSV.
+- Idiomas español, inglés y portugués; preferencia del administrador independiente de la del comprador.
+- Telegram Stars; transferencias con revisión humana para operaciones admitidas; integración de Stripe y PayPal con creación de pagos y verificación del proveedor.
+- Facturación SaaS en USD: cuota fija más comisión histórica, ciclos de 30 días, cambios de plan al próximo ciclo, ajustes, pagos parciales y control de vencimientos.
+- Resumen de recursos utilizados, ventas por moneda, comisiones y saldo a pagar, accesible desde Telegram y adjunto al aviso de factura.
+- Superadministración de negocios, bots, usuarios, cuentas, cobros, actividad y errores. Una suspensión administrativa requiere intervención del propietario de la plataforma.
 
-- Crear negocios y bots mediante el mecanismo oficial de Managed Bots, sin pedir tokens a los creadores.
-- Configurar nombre, foto, descripciones, bienvenida, soporte, textos y políticas; conectar canales y publicar después de las comprobaciones.
-- Crear planes, cambiar precios en Stars, elegir duración y renovación; consultar pagos, clientes y membresías.
-- Recibir soporte, responder conversaciones, añadir notas y gestionar roles del equipo.
-- Preparar campañas con confirmación de envío y recordatorios de vencimiento; consultar estadísticas y registros.
-- Como administrador de plataforma, ver todos los negocios, usuarios, bots, cobros SaaS, trabajos y auditoría; configurar precios SaaS, suspender negocios y conceder días de acceso sin cobro.
-- Como cliente, comprar en Stars, consultar acceso y vencimiento, gestionar renovación, ver políticas y contactar soporte.
+## Planes iniciales de la plataforma
 
-La cola, los asistentes y los identificadores de updates se guardan en PostgreSQL. Los tokens de bots y comprobantes se cifran. Cada botón está vinculado al usuario y al bot; los permisos se vuelven a comprobar al usarlo.
+| Plan | Cuota por 30 días | Comisión |
+|---|---:|---:|
+| STARTER | USD 0 | 8% |
+| PRO | USD 30 | 4% |
+| AGENCY | USD 80 | 1% |
 
-## Arranque
+Las tasas de cada venta se conservan. La prueba no genera cuotas ni comisiones SaaS. Los pagos del comprador al negocio están separados de los pagos del negocio a la plataforma.
 
-Python 3.13. En Seenode selecciona Worker, repositorio `gabolaurav123/Plataforma-SaaS`, rama `main`, directorio `.` y una sola réplica Basic.
+## Seenode
+
+Repositorio `gabolaurav123/Plataforma-SaaS`, rama `main`, raíz `.`, Python 3.13, **una instancia Worker Basic**. Sin web, Mini App, Redis ni puerto público en el despliegue actual.
 
 Build:
 
@@ -34,16 +40,10 @@ Inicio:
 alembic upgrade head && python scripts/grant_api.py && python scripts/seed.py && python -m platform_app.polling
 ```
 
-Copia las variables de [worker.env.example](deploy/seenode/worker.env.example) en Seenode y completa los valores privados allí. No subas secretos a GitHub. La guía explica cada variable y la configuración de BotFather.
+La migración actual es `0005`; conserva los registros anteriores y aplica las nuevas estructuras. Usar [las variables del Worker](deploy/seenode/worker.env.example), completar secretos en Seenode y conservar las claves de cifrado.
 
-## Coste y límites iniciales
+Stripe y PayPal requieren credenciales de cada negocio y una entrada HTTPS para sus confirmaciones. El código permite incorporar esa entrada en el mismo proceso, pero el Worker actual la mantiene desactivada. [Configuración de proveedores](docs/pagos.md).
 
-Una instancia Basic parte de US$3/mes. Neon utiliza su plan existente; el total depende de sus cuotas y del consumo. El lector de Telegram no consulta la base cuando no recibe mensajes. El mantenimiento se ejecuta cada 15 minutos por defecto; la retirada de acceso vencido puede retrasarse hasta ese intervalo. Una solicitud nueva siempre comprueba la fecha real de vencimiento.
+Se utiliza la instancia Basic existente y el plan de Neon del operador. El panel y la [tarifa pública actual de Seenode](https://seenode.com/pricing) muestran US$4/mes para Basic; el presupuesto anterior era US$3/mes y requiere revisión del propietario. El límite inicial es 20 bots conectados. Es una barrera operativa, no una garantía de capacidad a tráfico alto. [Mediciones y límites](docs/rendimiento.md).
 
-Esta configuración requiere una sola réplica y tiene un límite inicial configurable de 20 bots hijos, sin prometer capacidad para tráfico alto. Para actualizar, detener la instancia anterior antes de iniciar la siguiente y evitar dos lectores del mismo token. Las pruebas de Telegram usan un proveedor simulado; completar la prueba real con el nuevo Master antes de aceptar pagos de clientes.
-
-## Código y pruebas
-
-`backend/platform_app/polling.py` ejecuta el proceso único. `services/console.py` contiene los menús de creadores y propietario; `services/console_customer.py`, los de clientes. `migrations/` conserva la evolución del esquema. Ejecutar `pytest` y `ruff check backend tests` después de instalar `requirements.lock`.
-
-La interfaz web existente se conserva para una fase posterior en `apps/web/`. No se construye ni se despliega para este modo. La [arquitectura web opcional](docs/web-opcional.md), sus plantillas y Docker Compose corresponden a ese modo futuro, no al despliegue económico actual.
+El antiguo servicio y repositorio `telegram-saas-bot` no forman parte de este despliegue. La interfaz de `apps/web/` queda como código opcional para una fase posterior.

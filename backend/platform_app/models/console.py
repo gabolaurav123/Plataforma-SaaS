@@ -11,6 +11,8 @@ class ConsoleState(Record, Base):
     bot_key: Mapped[str] = mapped_column(String(36))
     telegram_user_id: Mapped[int] = mapped_column(BigInteger)
     data: Mapped[dict] = mapped_column(JSON, default=dict)
+    navigation: Mapped[list] = mapped_column(JSON, default=list)
+    screen: Mapped[dict] = mapped_column(JSON, default=dict)
     expires_at: Mapped[int] = mapped_column(BigInteger, index=True)
 
 

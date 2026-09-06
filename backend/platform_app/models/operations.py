@@ -29,6 +29,7 @@ class TelegramUpdate(Record, Base):
     tenant_id: Mapped[str | None] = mapped_column(ForeignKey("tenants.id"), index=True)
     update_id: Mapped[int] = mapped_column(BigInteger)
     payload: Mapped[dict] = mapped_column(JSON)
+    sensitive_ciphertext: Mapped[dict | None] = mapped_column(JSON, deferred=True)
     status: Mapped[str] = mapped_column(String(20), default="PENDING")
 
 
@@ -40,11 +41,18 @@ class ProviderEvent(Record, Base):
     account_key: Mapped[str] = mapped_column(String(80))
     external_id: Mapped[str] = mapped_column(String(255))
     payload_hash: Mapped[str] = mapped_column(String(64))
+    payload_ciphertext: Mapped[dict | None] = mapped_column(JSON, deferred=True)
+    status: Mapped[str] = mapped_column(String(20), default="PENDING")
 
 
 class Job(Record, Base):
     __tablename__ = "jobs"
-    __table_args__ = (Index("ix_job_due", "status", "run_at", "tenant_id"),)
+    __table_args__ = (
+        Index("ix_job_due", "status", "run_at", "tenant_id"),
+        Index("ix_job_lane_due", "lane", "status", "run_at", "tenant_id"),
+        Index("ix_job_stream_sequence", "stream_key", "status", "sequence"),
+        Index("ix_job_stale", "status", "lease_until"),
+    )
     tenant_id: Mapped[str | None] = mapped_column(ForeignKey("tenants.id"), index=True)
     bot_id: Mapped[str | None] = mapped_column(String(36))
     kind: Mapped[str] = mapped_column(String(40))
@@ -56,6 +64,10 @@ class Job(Record, Base):
     lease_owner: Mapped[str | None] = mapped_column(String(36))
     attempts: Mapped[int] = mapped_column(default=0)
     last_error_code: Mapped[str | None] = mapped_column(String(80))
+    lane: Mapped[str] = mapped_column(String(16), default="background", index=True)
+    started_at: Mapped[int | None] = mapped_column(BigInteger)
+    stream_key: Mapped[str | None] = mapped_column(String(100), index=True)
+    sequence: Mapped[int] = mapped_column(BigInteger, default=0)
 
 
 class SaaSPlan(Record, Base):
@@ -65,6 +77,8 @@ class SaaSPlan(Record, Base):
     features: Mapped[dict] = mapped_column(JSON, default=dict)
     prices: Mapped[dict] = mapped_column(JSON, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    fixed_usd_minor: Mapped[int] = mapped_column(BigInteger, default=0)
+    commission_bps: Mapped[int] = mapped_column(default=800)
 
 
 class SaaSSubscription(Scoped, Base):
@@ -75,6 +89,11 @@ class SaaSSubscription(Scoped, Base):
     status: Mapped[str] = mapped_column(String(20), default="TRIAL")
     trial_ends_at: Mapped[int] = mapped_column(BigInteger)
     current_period_end: Mapped[int] = mapped_column(BigInteger)
+    trial_starts_at: Mapped[int | None] = mapped_column(BigInteger)
+    cycle_started_at: Mapped[int | None] = mapped_column(BigInteger)
+    pending_plan_id: Mapped[str | None] = mapped_column(ForeignKey("saas_plans.id"))
+    grace_days: Mapped[int] = mapped_column(default=3)
+    cancelled_at: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class SaaSInvoice(Scoped, Base):

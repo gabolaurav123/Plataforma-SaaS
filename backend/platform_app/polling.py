@@ -11,14 +11,14 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, update as sql_update
 from . import models as m
 from .runtime import Runtime
 from .worker import Worker
 from .api.webhooks import store_update
 from .errors import DomainError, RetryLater
 from .services.bots import MASTER_UPDATES, CHILD_UPDATES
-from .services.common import enqueue
+from .services.common import enqueue, send
 
 log = logging.getLogger("platform.polling")
 
@@ -98,29 +98,44 @@ class Poller:
             except Exception as error:
                 code = error.code if isinstance(error, (DomainError, RetryLater)) else "POLLING_STORAGE_ERROR"
                 log.error("poll_failed bot=%s code=%s", self.key, code)
-                if code == "POLLING_CONFLICT":
-                    self.engine.fatal = "Telegram detectó otro proceso o webhook. Mantén una sola réplica."
-                    self.engine.stop.set()
-                    self.engine.wake.set()
-                    return
-                failures += 1
-                if code == "TOKEN_INVALID" and self.key != "master" and failures == 1:
-                    try:
+                if code in {"POLLING_CONFLICT", "TOKEN_INVALID"}:
+                    if self.key == "master":
+                        self.engine.fatal = (
+                            "Revisa el token maestro y mantén una sola réplica sin otro webhook."
+                        )
+                        self.engine.stop.set()
+                    else:
                         with self.engine.r.db.system() as db:
                             bot = db.get(m.ManagedBot, self.key)
                             if bot:
                                 bot.last_error_code = code
-                                enqueue(
-                                    db,
-                                    "PROVISION",
-                                    self.tenant_id,
-                                    {},
-                                    f"poll-token-repair:{self.key}:{m.now() // 900}",
-                                    self.key,
-                                )
-                        self.engine.wake.set()
-                    except Exception:
-                        log.error("token_repair_enqueue_failed bot=%s", self.key)
+                                if bot.connection_kind == "TOKEN" or code == "POLLING_CONFLICT":
+                                    bot.status = "CONNECTION_ERROR"
+                                    db.info["bots_changed"] = True
+                                    send(
+                                        db,
+                                        None,
+                                        bot.owner_telegram_user_id,
+                                        f"⚠️ @{bot.username}: revisa la conexión desde tu cuenta SaaS. "
+                                        + (
+                                            "El token fue revocado; reemplázalo desde Conexión."
+                                            if code == "TOKEN_INVALID"
+                                            else "Otro servicio está usando este bot. Detén ese servicio y vuelve a conectar."
+                                        ),
+                                        f"connection-error:{bot.id}:{self.version}:{code}",
+                                    )
+                                else:
+                                    enqueue(
+                                        db,
+                                        "PROVISION",
+                                        bot.tenant_id,
+                                        {},
+                                        f"token-repair:{bot.id}:{self.version}",
+                                        bot.id,
+                                    )
+                    self.engine.wake.set()
+                    return
+                failures += 1
                 delay = error.seconds if isinstance(error, RetryLater) else min(60, 2 ** min(failures, 6))
                 self.stop.wait(delay)
 
@@ -130,14 +145,27 @@ class PollingEngine:
         self.r, self.worker = runtime, Worker(runtime)
         self.stop, self.wake = threading.Event(), threading.Event()
         self.pollers, self.fatal = {}, None
+        self.drainers = []
 
     def reconcile(self):
+        if self.r.settings.telegram_transport == "webhook":
+            return
         desired = {"master": (None, self.r.clients.master(), 1)}
         with self.r.db.system() as db:
             bots = list(
                 db.scalars(
                     select(m.ManagedBot)
-                    .where(m.ManagedBot.status.not_in(["OWNERSHIP_CHANGED", "SUSPENDED"]))
+                    .where(
+                        m.ManagedBot.status.not_in(
+                            [
+                                "OWNERSHIP_CHANGED",
+                                "SUSPENDED",
+                                "DISCONNECTED",
+                                "CONNECTION_ERROR",
+                                "PROVISIONING",
+                            ]
+                        )
+                    )
                     .order_by(m.ManagedBot.id)
                 )
             )
@@ -157,6 +185,7 @@ class PollingEngine:
                 if poller.thread.is_alive():
                     raise RuntimeError("El lector anterior no terminó; reinicia una sola réplica.")
                 del self.pollers[key]
+                self.r.clients.retire(key, poller.version)
         for key, (tid, client, version) in desired.items():
             if key not in self.pollers:
                 poller = Poller(self, key, tid, client, version)
@@ -168,6 +197,34 @@ class PollingEngine:
             enqueue(db, "TICK", None, {}, f"tick:{m.now() // 60}")
             db.execute(delete(m.ConsoleButton).where(m.ConsoleButton.expires_at < m.now()))
             db.execute(delete(m.ConsoleState).where(m.ConsoleState.expires_at < m.now()))
+            for attempt in db.scalars(
+                select(m.ConnectionAttempt).where(
+                    m.ConnectionAttempt.expires_at < m.now(),
+                    m.ConnectionAttempt.status.in_(["PENDING", "VALIDATED"]),
+                )
+            ):
+                attempt.status, attempt.token_ciphertext = "EXPIRED", None
+            for report in db.scalars(
+                select(m.Report).where(
+                    m.Report.expires_at < m.now(), m.Report.content_ciphertext.is_not(None)
+                )
+            ):
+                report.content_ciphertext, report.status = None, "EXPIRED"
+            db.execute(
+                sql_update(m.TelegramUpdate)
+                .where(
+                    m.TelegramUpdate.status == "FAILED", m.TelegramUpdate.created_at < m.now() - 14 * 86400
+                )
+                .values(sensitive_ciphertext=None)
+            )
+            db.execute(
+                sql_update(m.ProviderEvent)
+                .where(
+                    m.ProviderEvent.status.in_(["FAILED", "REVIEW_REQUIRED"]),
+                    m.ProviderEvent.created_at < m.now() - 14 * 86400,
+                )
+                .values(payload_ciphertext=None)
+            )
             # Keep durable offsets forever; prune only completed transport data, not business records.
             db.execute(
                 delete(m.TelegramUpdate).where(
@@ -175,18 +232,61 @@ class PollingEngine:
                 )
             )
 
-    def deadline(self, maintenance_at):
+    def deadline(self, maintenance_at, lane=None):
         with self.r.db.system() as db:
             dates = [maintenance_at]
-            due = db.scalar(select(func.min(m.Job.run_at)).where(m.Job.status == "PENDING"))
-            stale = db.scalar(select(func.min(m.Job.lease_until)).where(m.Job.status == "RUNNING"))
+            due = db.scalar(
+                select(func.min(m.Job.run_at)).where(
+                    m.Job.status == "PENDING", m.Job.lane == lane if lane else True
+                )
+            )
+            stale = db.scalar(
+                select(func.min(m.Job.lease_until)).where(
+                    m.Job.status == "RUNNING", m.Job.lane == lane if lane else True
+                )
+            )
             if due is not None:
                 dates.append(due)
             if stale is not None:
                 dates.append(stale)
             return max(0.1, min(dates) - time.time())
 
+    def drain(self, lane, wake):
+        worker = Worker(self.r, lane)
+        while not self.stop.is_set():
+            wake.clear()
+            try:
+                if worker.run_one():
+                    continue
+                delay = self.deadline(m.now() + self.r.settings.maintenance_interval, lane)
+            except Exception:
+                log.error("queue_unavailable lane=%s", lane)
+                delay = 5
+            wake.wait(min(delay, self.r.settings.maintenance_interval))
+
     def run(self):
+        server, http_thread = None, None
+        if self.r.settings.payment_webhooks_enabled or self.r.settings.telegram_transport == "webhook":
+            import uvicorn
+            from .ingress import create_ingress
+
+            server = uvicorn.Server(
+                uvicorn.Config(
+                    create_ingress(self.r),
+                    host="0.0.0.0",
+                    port=self.r.settings.port,
+                    access_log=False,
+                    log_level="warning",
+                )
+            )
+            http_thread = threading.Thread(target=server.run, name="webhook-listener", daemon=True)
+            http_thread.start()
+            deadline = time.monotonic() + 15
+            while not server.started:
+                if not http_thread.is_alive() or time.monotonic() >= deadline:
+                    server.should_exit = True
+                    raise RuntimeError("WEBHOOK_LISTENER_START_FAILED")
+                self.stop.wait(0.05)
         capability = self.r.manager.configure_master()
         self.reconcile()
         log.info(
@@ -197,29 +297,47 @@ class PollingEngine:
             self.r.settings.maintenance_interval,
         )
         next_maintenance = 0
+        for lane, count in [
+            ("interactive", self.r.settings.interactive_workers),
+            ("background", self.r.settings.background_workers),
+        ]:
+            for _ in range(count):
+                wake = threading.Event()
+                self.r.job_wakeups.append(wake)
+                thread = threading.Thread(
+                    target=self.drain, args=(lane, wake), name="queue-" + lane, daemon=True
+                )
+                self.drainers.append((thread, wake))
+                thread.start()
         try:
             while not self.stop.is_set():
+                if http_thread and not http_thread.is_alive():
+                    self.fatal = "WEBHOOK_LISTENER_STOPPED"
+                    break
                 self.wake.clear()
                 if m.now() >= next_maintenance:
                     self.maintenance()
                     next_maintenance = m.now() + self.r.settings.maintenance_interval
                     self.reconcile()
-                # Bound each drain so maintenance and newly provisioned bots cannot starve.
-                until = time.monotonic() + 2
-                worked = False
-                while not self.stop.is_set() and self.worker.run_one():
-                    worked = True
-                    if time.monotonic() >= until:
-                        break
-                if worked:
+                if self.r.bot_config_changed.is_set():
+                    self.r.bot_config_changed.clear()
                     self.reconcile()
-                self.wake.wait(min(self.deadline(next_maintenance), self.r.settings.maintenance_interval))
+                # Metadata is refreshed on change or maintenance, never after each message.
+                self.r.bot_config_changed.wait(min(1, max(0.1, next_maintenance - time.time())))
         finally:
             self.stop.set()
+            for thread, wake in self.drainers:
+                wake.set()
+            for thread, wake in self.drainers:
+                thread.join(15)
+                self.r.job_wakeups.remove(wake)
             for poller in self.pollers.values():
                 poller.stop.set()
             for poller in self.pollers.values():
                 poller.thread.join(self.r.settings.polling_timeout + 9)
+            if server:
+                server.should_exit = True
+                http_thread.join(15)
         if self.fatal:
             raise RuntimeError(self.fatal)
 
@@ -240,7 +358,10 @@ def main():
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     with process_lock(Path(runtime.settings.storage_path) / "telegram-worker.lock"):
-        engine.run()
+        try:
+            engine.run()
+        finally:
+            runtime.close()
 
 
 if __name__ == "__main__":

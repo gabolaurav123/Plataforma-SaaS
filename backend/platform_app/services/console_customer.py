@@ -1,35 +1,62 @@
-"""Customer checkout, membership and support inside Telegram."""
+"""Branded customer journeys, independent language and durable checkout requests."""
 
 from sqlalchemy import select
 from .. import models as m
-from ..db import get_scoped
 from ..errors import DomainError
-from . import tenants, crm
+from . import tenants, crm, payment_methods
 from .common import emit, enqueue
-from .texts import bot_text
-from .console import date
+from .texts import bot_text, customer_variables
+from .business import entity, money
+from .i18n import LANGUAGES
 
 
 def contact(ui, attribution_code=None):
-    tenants.entitlement(ui.db, ui.bot.tenant_id)
-    if ui.bot.status in {"OWNERSHIP_CHANGED", "SUSPENDED"}:
-        raise DomainError("BOT_UNAVAILABLE", "Bot no disponible.")
-    if not ui.bot.published and ui.actor["id"] != ui.bot.owner_telegram_user_id:
-        raise DomainError("BOT_NOT_READY", "Este bot está en preparación. Vuelve pronto.")
-    return crm.upsert_contact(ui.db, ui.bot, ui.actor, attribution_code)
+    if getattr(ui, "_contact", None):
+        return ui._contact
+    tenants.entitlement(ui.db, ui.bot.tenant_id, writable=False)
+    if ui.bot.status in {"OWNERSHIP_CHANGED", "DISCONNECTED", "CONNECTION_ERROR"}:
+        raise DomainError("BOT_UNAVAILABLE", ui.t("not_ready"))
+    if not ui.bot.published and not ui.business_role():
+        raise DomainError("BOT_NOT_READY", ui.t("not_ready"))
+    previous = ui.db.scalar(
+        select(m.Contact.id).where(
+            m.Contact.bot_id == ui.bot.id, m.Contact.telegram_user_id == ui.actor["id"]
+        )
+    )
+    ui._contact = person = crm.upsert_contact(ui.db, ui.bot, ui.actor, attribution_code)
+    if not previous:
+        config = ui.db.scalar(select(m.BotSettings).where(m.BotSettings.bot_id == ui.bot.id))
+        if not ui.actor.get("language_code"):
+            person.locale = config.preferences.get("language", "es") if config else "es"
+        emit(ui.db, ui.bot.tenant_id, "USER_JOINED", "user-joined:" + person.id, ui.bot.id, person.id)
+        from .notifications import notify
+
+        notify(ui.db, ui.r, ui.bot, "new_user", "👤 " + person.first_name, "new-user:" + person.id)
+    ui.language = person.locale
+    return person
 
 
 def home(ui):
     person = contact(ui)
+    rows = [
+        [ui.button(ui.t("view_plans"), "plans")],
+        [ui.button(ui.t("membership"), "memberships"), ui.button(ui.t("renew"), "plans")],
+        [ui.button(ui.t("support"), "support"), ui.button(ui.t("policies"), "policies")],
+        [ui.button(ui.t("customer_language"), "language")],
+        [ui.button(ui.t("opt_out"), "stop")],
+    ]
+    if ui.business_role():
+        rows.insert(0, [ui.button(ui.t("admin"), "biz:home")])
     ui.say(
-        bot_text(ui.db, ui.bot, "WELCOME", first_name=person.first_name),
-        [
-            [ui.button("⭐ Ver planes", "plans")],
-            [ui.button("🎟 Mi membresía", "memberships")],
-            [ui.button("📜 Políticas", "policies")],
-            [ui.button("💬 Soporte", "support")],
-            [ui.button("🔕 Desactivar campañas", "stop")],
-        ],
+        bot_text(
+            ui.db,
+            ui.bot,
+            "WELCOME",
+            locale=person.locale,
+            name=person.first_name,
+            username=person.username or "",
+        ),
+        rows,
     )
 
 
@@ -37,7 +64,6 @@ def message(ui, message):
     text = message.get("text", "").strip()
     code = text.split(maxsplit=1)[1] if text.startswith("/start ") else None
     person = contact(ui, code)
-    crm.incoming(ui.db, ui.bot, person, text or message.get("caption", "[Archivo]"), message["message_id"])
     if text.startswith(("/start", "/cancel")):
         ui.state().data = {}
         person.opted_out = False
@@ -49,7 +75,19 @@ def message(ui, message):
             ui.bot.id,
             person.id,
         )
-        home(ui)
+        if code and code.startswith("gift_"):
+            sub = ui.r.invitations.redeem(ui.db, ui.bot, person, code[5:])
+            ui.say(
+                bot_text(
+                    ui.db,
+                    ui.bot,
+                    "SUBSCRIPTION_ACTIVE",
+                    locale=person.locale,
+                    **customer_variables(ui.db, ui.bot, person, sub),
+                )
+            )
+        else:
+            home(ui)
     elif text.startswith("/plans"):
         dispatch(ui, "plans", {})
     elif text.startswith("/membership"):
@@ -59,132 +97,230 @@ def message(ui, message):
     elif text.startswith(("/support", "/paysupport")):
         dispatch(ui, "support", {})
     elif message.get("photo") or message.get("document"):
-        pending = list(
-            ui.db.scalars(
-                select(m.Payment).where(
-                    m.Payment.bot_id == ui.bot.id,
-                    m.Payment.contact_id == person.id,
-                    m.Payment.provider == "BANK_TRANSFER",
-                    m.Payment.status.in_(["PENDING", "RECEIPT_SUBMITTED"]),
+        state = ui.state().data
+        query = select(m.Payment).where(
+            m.Payment.bot_id == ui.bot.id,
+            m.Payment.tenant_id == ui.bot.tenant_id,
+            m.Payment.contact_id == person.id,
+            m.Payment.provider == "BANK_TRANSFER",
+            m.Payment.status.in_(["PENDING", "RECEIPT_SUBMITTED"]),
+        )
+        if state.get("receipt_payment_id"):
+            query = query.where(m.Payment.id == state["receipt_payment_id"])
+        pending = list(ui.db.scalars(query.limit(9)))
+        file_id = message["photo"][-1]["file_id"] if message.get("photo") else message["document"]["file_id"]
+        if len(pending) == 1:
+            queue_receipt(ui, pending[0], file_id)
+        elif pending:
+            ui.say(
+                ui.t("choose_receipt_payment"),
+                [
+                    [
+                        ui.button(
+                            money(row.amount_minor, row.currency) + " · " + row.id[:8],
+                            "receipt_attach",
+                            id=row.id,
+                            file_id=file_id,
+                        )
+                    ]
+                    for row in pending
+                ],
+            )
+        else:
+            ui.say(ui.t("no_pending_transfer"))
+    else:
+        crm.incoming(
+            ui.db, ui.bot, person, text or message.get("caption", "[Archivo]"), message["message_id"]
+        )
+        ui.say(ui.t("received"))
+
+
+def queue_receipt(ui, payment, file_id):
+    person = contact(ui)
+    if payment.contact_id != person.id or payment.bot_id != ui.bot.id or payment.provider != "BANK_TRANSFER":
+        raise DomainError("NOT_FOUND", ui.t("no_pending_transfer"), 404)
+    enqueue(
+        ui.db,
+        "SUBMIT_RECEIPT",
+        ui.bot.tenant_id,
+        {"payment_id": payment.id, "file_id": file_id, "viewer_id": person.telegram_user_id},
+        f"customer-receipt:{ui.bot.id}:{ui.update['update_id']}",
+        ui.bot.id,
+    )
+    ui.state().data = {}
+    ui.say(ui.t("receipt_queued"))
+
+
+def prices(ui, plan):
+    rows = list(
+        ui.db.scalars(
+            select(m.PlanPrice).where(
+                m.PlanPrice.plan_id == plan.id, m.PlanPrice.tenant_id == ui.bot.tenant_id
+            )
+        )
+    )
+    result = []
+    for row in rows:
+        if plan.product_kind == "DIGITAL" and row.provider != "TELEGRAM_STARS":
+            continue
+        if row.provider not in payment_methods.PROVIDERS:
+            continue
+        method = payment_methods.get(ui.db, ui.bot, row.provider)
+        enabled = (
+            method.enabled
+            if method
+            else bool(
+                ui.db.scalar(
+                    select(m.ProviderConfig.id).where(
+                        m.ProviderConfig.tenant_id == ui.bot.tenant_id,
+                        m.ProviderConfig.provider == row.provider,
+                        m.ProviderConfig.enabled.is_(True),
+                    )
                 )
             )
         )
-        if len(pending) == 1:
-            file_id = (
-                message["photo"][-1]["file_id"] if message.get("photo") else message["document"]["file_id"]
-            )
-            data = ui.r.clients.child(ui.db, ui.bot).download(file_id, ui.r.settings.max_upload_bytes)
-            ui.r.receipts.submit(ui.db, ui.bot, pending[0], data)
-            ui.say(bot_text(ui.db, ui.bot, "RECEIPT_RECEIVED"))
-        elif len(pending) > 1:
-            ui.say(
-                "Hay varios pagos externos pendientes. Contacta al equipo para identificar el comprobante."
-            )
-        else:
-            ui.say("Mensaje recibido. Para soporte escribe también tu consulta en texto.")
-    else:
-        ui.say("Mensaje recibido. El equipo podrá responderte desde este bot.")
+        if enabled:
+            result.append(row)
+    return result
 
 
 def dispatch(ui, action, d):
     person = contact(ui)
     bot, db = ui.bot, ui.db
-    if action == "home":
+    if action in {"home", "cancel"}:
+        ui.state().data = {}
         home(ui)
     elif action == "plans":
         query = select(m.Plan).where(
-            m.Plan.bot_id == bot.id, m.Plan.tenant_id == bot.tenant_id, m.Plan.active.is_(True)
+            m.Plan.bot_id == bot.id,
+            m.Plan.tenant_id == bot.tenant_id,
+            m.Plan.active.is_(True),
+            m.Plan.visible.is_(True),
+            m.Plan.archived_at.is_(None),
         )
-        if d.get("after"):
-            query = query.where(m.Plan.id > d["after"])
-        plans = list(db.scalars(query.order_by(m.Plan.id).limit(9)))
-        buttons = []
-        for plan in plans[:8]:
-            price = db.scalar(
-                select(m.PlanPrice).where(m.PlanPrice.plan_id == plan.id, m.PlanPrice.currency == "XTR")
-            )
-            if price:
-                buttons.append(
-                    [
-                        ui.button(
-                            f"{plan.name}: {price.amount_minor} ⭐ / {plan.duration_days} días",
-                            "plan",
-                            id=plan.id,
-                        )
-                    ]
-                )
+        page = max(0, min(int(d.get("page", 0)), 10000))
+        plans = list(db.scalars(query.order_by(m.Plan.sort_order, m.Plan.id).offset(page * 8).limit(9)))
+        rows = [[ui.button(plan.name, "plan", id=plan.id)] for plan in plans[:8]]
         if len(plans) > 8:
-            buttons.append([ui.button("Más planes →", "plans", after=plans[7].id)])
-        ui.say(
-            "Selecciona un plan para ver las condiciones."
-            if buttons
-            else "Todavía no hay planes disponibles.",
-            buttons,
-        )
+            rows.append([ui.button(ui.t("next"), "plans", page=page + 1)])
+        ui.say(bot_text(db, bot, "PLAN_LIST", locale=person.locale) if rows else ui.t("empty"), rows)
     elif action == "plan":
-        plan = get_scoped(db, m.Plan, d["id"], bot.tenant_id)
-        if plan.bot_id != bot.id or not plan.active:
-            raise DomainError("NOT_FOUND", "Plan no disponible.")
-        price = db.scalar(
-            select(m.PlanPrice).where(m.PlanPrice.plan_id == plan.id, m.PlanPrice.currency == "XTR")
-        )
-        ui.say(
-            f"{plan.name}\n{plan.description}\n{price.amount_minor} Stars · {plan.duration_days} días\nRenovación: {'automática cada 30 días' if plan.recurring else 'manual'}\nLee las políticas antes de continuar.",
+        plan = entity(db, m.Plan, d["id"], bot)
+        if not plan.active or plan.archived_at:
+            raise DomainError("PLAN_UNAVAILABLE", ui.t("empty"))
+        rows = [
             [
-                [ui.button("📜 Leer políticas", "policies")],
-                [ui.button("Aceptar condiciones y continuar", "buy", id=plan.id)],
-            ],
+                ui.button(
+                    ui.t(
+                        "pay_with",
+                        method=payment_methods.PROVIDERS[price.provider],
+                        amount=money(price.amount_minor, price.currency),
+                    ),
+                    "buy",
+                    id=plan.id,
+                    provider=price.provider,
+                    currency=price.currency,
+                )
+            ]
+            for price in prices(ui, plan)
+        ]
+        value = (
+            f"📦 {plan.name}\n{plan.description}\n"
+            + ui.t("plan_duration", days=plan.duration_days)
+            + "\n"
+            + "\n".join("• " + str(x) for x in plan.benefits)
         )
+        value += (
+            "\n"
+            + ui.t("automatic_renewal" if plan.recurring else "manual_renewal")
+            + "\n"
+            + ui.t("payment_terms")
+        )
+        ui.say(value, [[ui.button(ui.t("policies"), "policies")]] + rows)
     elif action == "buy":
+        plan = entity(db, m.Plan, d["id"], bot)
+        provider, currency = d.get("provider", "TELEGRAM_STARS"), d.get("currency", "XTR")
+        if not any((price.provider, price.currency) == (provider, currency) for price in prices(ui, plan)):
+            raise DomainError("PRICE_UNAVAILABLE", ui.t("empty"))
         payment = ui.r.payments.create(
-            db, bot, person, d["id"], "TELEGRAM_STARS", "XTR", f"native:{person.id}:{ui.update['update_id']}"
+            db,
+            bot,
+            person,
+            plan.id,
+            provider,
+            currency,
+            f"native:{bot.id}:{person.id}:{ui.update['update_id']}",
+            defer_checkout=True,
         )
         emit(db, bot.tenant_id, "PLAN_SELECTED", f"plan-selected:{payment.id}", bot.id, person.id)
-        ui.say(
-            "Revisa y confirma el pago en Telegram. La membresía se activará cuando Telegram confirme el cobro.",
-            [[{"text": "Pagar con Stars", "url": payment.checkout_url}]],
-        )
+        ui.say(ui.t("checkout_queued"))
+    elif action in {"receipt_for", "receipt_attach"}:
+        payment = entity(db, m.Payment, d["id"], bot)
+        if (
+            payment.contact_id != person.id
+            or payment.provider != "BANK_TRANSFER"
+            or payment.status not in {"PENDING", "RECEIPT_SUBMITTED"}
+        ):
+            raise DomainError("NOT_FOUND", ui.t("no_pending_transfer"), 404)
+        if action == "receipt_attach":
+            queue_receipt(ui, payment, d["file_id"])
+        else:
+            ui.state().data = {"receipt_payment_id": payment.id}
+            ui.say(bot_text(db, bot, "RECEIPT_REQUEST", locale=person.locale))
     elif action == "policies":
         config = db.scalar(select(m.BotSettings).where(m.BotSettings.bot_id == bot.id))
-        for key, label in [("terms", "Términos"), ("privacy", "Privacidad"), ("refund", "Reembolsos")]:
-            ui.say(label + "\n" + (config.policies.get(key) or "Pendiente de configurar."))
+        rows = [[ui.button(ui.t(key), "policy", key=key)] for key in ["terms", "privacy", "refund"]]
+        ui.say(ui.t("policies"), rows)
+    elif action == "policy":
+        if d["key"] not in {"terms", "privacy", "refund"}:
+            raise DomainError("NOT_FOUND", ui.t("empty"))
+        config = db.scalar(select(m.BotSettings).where(m.BotSettings.bot_id == bot.id))
+        ui.say(ui.t(d["key"]) + "\n" + (config.policies.get(d["key"]) or ui.t("empty")))
     elif action == "memberships":
         query = select(m.Subscription).where(
-            m.Subscription.bot_id == bot.id, m.Subscription.contact_id == person.id
+            m.Subscription.bot_id == bot.id,
+            m.Subscription.tenant_id == bot.tenant_id,
+            m.Subscription.contact_id == person.id,
         )
         if d.get("after"):
             query = query.where(m.Subscription.id > d["after"])
         subs = list(db.scalars(query.order_by(m.Subscription.id).limit(9)))
-        buttons, lines = [], []
+        lines, buttons = [], []
         for sub in subs[:8]:
-            plan = db.get(m.Plan, sub.plan_id)
+            values = customer_variables(db, bot, person, sub)
             active = sub.status == "ACTIVE" and sub.expires_at > m.now()
             lines.append(
-                f"{plan.name}: {sub.status if active else 'Vencida o inactiva'} · hasta {date(sub.expires_at)}"
+                ui.t(
+                    "membership_line",
+                    plan=values["plan"],
+                    status=ui.t("active" if active else "inactive"),
+                    end=values["expiration_date"],
+                )
             )
-            if active and plan.channel_id:
-                buttons.append([ui.button("Entrar: " + plan.name, "access", id=sub.id)])
+            if active and sub.channel_snapshot:
+                buttons.append([ui.button("📺 " + values["plan"], "access", id=sub.id)])
             if active and sub.initial_charge_id:
                 buttons.append(
                     [
                         ui.button(
-                            ("Cancelar" if sub.auto_renew else "Reactivar") + " renovación: " + plan.name,
+                            ui.t("cancel_renewal" if sub.auto_renew else "enable_renewal"),
                             "renewal",
                             id=sub.id,
                             canceled=sub.auto_renew,
                         )
                     ]
                 )
+            buttons.append([ui.button(ui.t("renew") + " · " + values["plan"], "plan", id=sub.plan_id)])
         if len(subs) > 8:
-            buttons.append([ui.button("Más membresías →", "memberships", after=subs[7].id)])
-        ui.say("\n".join(lines) or "Aún no tienes membresías.", buttons)
+            buttons.append([ui.button(ui.t("next"), "memberships", after=subs[7].id)])
+        ui.say("\n".join(lines) or ui.t("no_membership"), buttons)
     elif action in {"access", "renewal", "renewal_confirm"}:
-        sub = get_scoped(db, m.Subscription, d["id"], bot.tenant_id)
-        if sub.contact_id != person.id or sub.bot_id != bot.id:
-            raise DomainError("NOT_FOUND", "Membresía no disponible.")
+        sub = entity(db, m.Subscription, d["id"], bot)
+        if sub.contact_id != person.id:
+            raise DomainError("NOT_FOUND", ui.t("no_membership"), 404)
         if action == "access":
             if sub.status != "ACTIVE" or sub.expires_at <= m.now():
-                raise DomainError("EXPIRED", "La membresía ya venció.")
+                raise DomainError("EXPIRED", ui.t("inactive"))
             enqueue(
                 db,
                 "GRANT_ACCESS",
@@ -193,40 +329,47 @@ def dispatch(ui, action, d):
                 f"native-access:{sub.id}:{ui.update['update_id']}",
                 bot.id,
             )
-            previous = db.scalar(
-                select(m.ChannelInvite).where(
-                    m.ChannelInvite.subscription_id == sub.id,
-                    m.ChannelInvite.expires_at > m.now(),
-                    m.ChannelInvite.used_at.is_(None),
-                    m.ChannelInvite.revoked_at.is_(None),
-                )
-            )
-            ui.say(
-                "Usa tu enlace personal." if previous else "Estamos preparando tu enlace de acceso.",
-                [[{"text": "Entrar al canal", "url": previous.invite_link}]] if previous else [],
-            )
+            ui.say(ui.t("access_queued"))
         elif action == "renewal":
-            ui.say(
-                "Confirma el cambio de renovación. Tu periodo ya pagado se conserva.",
-                [[ui.button("Confirmar", "renewal_confirm", **d)]],
-            )
+            ui.say(ui.t("renewal_confirm"), [[ui.button(ui.t("confirm"), "renewal_confirm", **d)]])
         else:
-            payment = db.get(m.Payment, sub.payment_id)
-            if payment.provider != "TELEGRAM_STARS" or not payment.recurring:
-                raise DomainError("NOT_RECURRING", "Esta membresía se renueva manualmente.")
-            ui.r.payments.providers["TELEGRAM_STARS"].cancel_subscription(db, bot, person, sub, d["canceled"])
-            sub.auto_renew, sub.renewal_status = not d["canceled"], "CANCELED" if d["canceled"] else "ACTIVE"
-            ui.say("Renovación actualizada.")
+            if not sub.initial_charge_id:
+                raise DomainError("NOT_RECURRING", ui.t("manual_renewal"))
+            enqueue(
+                db,
+                "CANCEL_CUSTOMER_RENEWAL",
+                bot.tenant_id,
+                {
+                    "subscription_id": sub.id,
+                    "canceled": bool(d["canceled"]),
+                    "viewer_id": person.telegram_user_id,
+                    "actor_id": str(person.telegram_user_id),
+                },
+                f"customer-renewal:{sub.id}:{ui.update['update_id']}",
+                bot.id,
+            )
+            ui.say(ui.t("change_queued"))
     elif action == "stop":
         person.opted_out = True
-        ui.say("Desactivaste los mensajes de campañas. Tus mensajes de pago y acceso siguen habilitados.")
+        ui.say(ui.t("opt_out_saved"))
+    elif action in {"language", "language_save"}:
+        if action == "language_save":
+            if d["language"] not in LANGUAGES:
+                raise DomainError("INVALID_LANGUAGE", ui.t("empty"))
+            person.locale = ui.language = d["language"]
+            ui.say(ui.t("language_saved"))
+        else:
+            ui.say(
+                ui.t("customer_language"),
+                [[ui.button(label, "language_save", language=key)] for key, label in LANGUAGES.items()],
+            )
     elif action == "support":
         config = db.scalar(select(m.BotSettings).where(m.BotSettings.bot_id == bot.id))
         ui.say(
-            bot_text(db, bot, "SUPPORT") + "\nEscribe aquí tu consulta para que el equipo la vea.",
-            [[{"text": "Contactar soporte", "url": "https://t.me/" + config.support_username.lstrip("@")}]]
+            bot_text(db, bot, "SUPPORT", locale=person.locale),
+            [[{"text": ui.t("support"), "url": "https://t.me/" + config.support_username.lstrip("@")}]]
             if config.support_username
             else [],
         )
     else:
-        raise DomainError("UNKNOWN_ACTION", "Abre /start para actualizar las opciones.")
+        raise DomainError("UNKNOWN_ACTION", ui.t("error"))

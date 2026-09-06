@@ -1,38 +1,30 @@
-# Controles y verificación de seguridad
+# Seguridad y límites de la verificación
 
-Checklist solicitado para la entrega. Marca de implementación no equivale a auditoría externa o prueba en infraestructura real.
+Esta revisión incluye controles y pruebas automatizadas; no equivale a una auditoría independiente ni a una garantía de ausencia de vulnerabilidades.
 
-## Implementado
+## Aislamiento y acceso
 
-- [x] Proyecto independiente, sin credenciales ni imports del bot anterior.
-- [x] `initData` validado en servidor con el token del bot correspondiente; edad, firma, campos duplicados y fechas futuras rechazados.
-- [x] Sesiones opacas, hash en DB, duración limitada y bearer solo en memoria del frontend.
-- [x] Membresía y permisos comprobados de nuevo en cada petición; no se confía en tenant ni rol enviado por el navegador.
-- [x] Filtros ORM obligatorios, validación de escrituras, claves foráneas compuestas y RLS forzado PostgreSQL.
-- [x] Credenciales API y sistema separadas; control de privilegios/RLS al arrancar producción.
-- [x] Tokens y secretos de proveedores/comprobantes cifrados con AES-GCM y contexto autenticado.
-- [x] Token fuera del webhook URL, secret header por bot y actualización idempotente.
-- [x] Cambios de propietario despublican/quarantinan sin transferir datos del tenant anterior.
-- [x] Pagos ligados a bot, usuario, plan, moneda e importe; cargos únicos y control de eventos repetidos/atrasados.
-- [x] Checkout digital del cliente restringido a Stars; procesadores externos deshabilitados.
-- [x] Archivos con límite de bytes y píxeles, formato real, normalización, eliminación de metadatos y almacenamiento cifrado.
-- [x] Exportaciones limitadas por página y protección frente a fórmulas de hojas de cálculo.
-- [x] Secretos/payloads excluidos de serialización y logs; errores de validación sin eco de inputs sensibles.
-- [x] Límites salientes globales/tenant/bot/usuario y manejo de 429; opt-out para campañas.
-- [x] Auditoría de acciones importantes; el rol API no puede actualizar/borrar esa tabla.
-- [x] Pruebas de accesos cruzados, firmas, ciphertext copiado, replay de pagos y webhooks.
+- Los registros comerciales están vinculados al negocio y al bot. Se validan recursos, roles y permisos en cada acción, incluida la entrega de trabajos diferidos.
+- PostgreSQL usa claves compuestas, RLS forzado y un rol API sin privilegios de sistema. Los diálogos, botones, cursores y ajustes globales no se conceden a ese rol. Los libros financieros y el historial de suscripciones no admiten sus escrituras; la auditoría es de solo anexado para la API.
+- El Worker emplea una conexión de sistema privilegiada. RLS no protege contra ese rol: el código de confianza debe comprobar siempre los límites de cada negocio y bot.
+- Los callbacks son opacos, privados del actor y del bot, de un solo uso y con caducidad. Cambiar un username no cambia la identidad: se usa el ID numérico de Telegram.
+- Las funciones de Mini App y API conservadas validan `initData`, sesión, edad, firma, audiencia y permisos; el despliegue actual no publica esa interfaz.
 
-## Requerido antes de producción
+## Secretos, archivos y pagos
 
-- [ ] Credenciales nuevas y vault del operador, TLS, audiencia de Mini Apps adecuada y acceso administrativo restringido.
-- [ ] Validar RLS y permisos usando **los roles reales del despliegue**, además de las pruebas embebidas.
-- [ ] Revisar el alcance de la conexión de sistema privilegiada, sus accesos de red y registros de administración.
-- [ ] Ensayar PostgreSQL/Redis con varios workers y carga representativa; medir latencia de pre-checkout.
-- [ ] Ensayar backup/restore de DB, comprobantes y keyring; cifrar el destino del dump.
-- [ ] Definir borrado/anonimización, retención y atención a solicitudes de datos; no están automatizados.
-- [ ] Configurar alertas del servicio, del worker y de backups; revisar trabajos `DELIVERY_UNKNOWN`.
-- [ ] Probar Bot Management Mode, Stars, reembolsos y permisos de canales con bots/canales nuevos.
-- [ ] Revisar políticas reales, actividad comercial y alcance de métodos externos antes de habilitarlos.
-- [ ] Revisar seguridad de dependencias y aplicar actualizaciones antes del despliegue.
+- Tokens, credenciales de proveedores, comprobantes, reportes y actualizaciones sensibles se cifran con AES-GCM y contexto autenticado. El token no se devuelve completo después de su conexión.
+- El mensaje que contiene un token se intenta eliminar y su contenido no se conserva en texto claro en los trabajos. Esto no convierte los chats con bots en comunicaciones con cifrado de extremo a extremo.
+- No se registran URLs autenticadas, cuerpos de proveedores ni secretos en errores. Los payloads privados se purgan al completar el trabajo; los fallidos se retienen hasta 14 días. Los CSV cifrados caducan a los siete días.
+- Las imágenes tienen límites de bytes y píxeles y se normalizan; se admite PDF con inspección de formato y tamaño. No se ofrece un antivirus ni prueba de autenticidad de documentos. El hash exacto y la similitud ayudan a detectar reutilización de comprobantes; la aprobación sigue siendo humana.
+- Los pagos validan bot, comprador, plan, moneda, importe e identidad del cargo. Confirmaciones, comisiones, liquidaciones y reembolsos parciales tienen claves de idempotencia e historial.
+- Stripe valida la firma y el tiempo del webhook y vuelve a comprobar el pago. PayPal verifica el evento y consulta/captura la orden en servidor. Ambos requieren configuración real e ingreso HTTPS; permanecen desactivados en este Worker.
+- El checkout digital dentro de Telegram exige Stars. Las transferencias del negocio se limitan a operaciones permitidas por su contexto; los registros de liquidación de la plataforma no acreditan por sí mismos que un método cumpla las reglas comerciales de Telegram.
+- Reportes con aislamiento, permisos y protección contra fórmulas de hojas de cálculo. Campañas con confirmación, opt-out, cuotas, límites de envío, manejo de 429 y estados de entrega desconocida sin reenvío automático ciego.
 
-RLS protege el acceso ordinario de la API, no una cuenta de sistema con privilegios. Los hashes de comprobantes detectan coincidencias y similitud; no prueban autenticidad bancaria ni fraude. No hay reconocimiento OCR ni aprobación bancaria automática.
+## Evidencia y operación
+
+Se verificaron aislamiento y permisos en PostgreSQL PGlite, migración con datos existentes y restauración de una copia cifrada real de la nueva base Neon. Consultar [pruebas](pruebas.md) y [recuperación](recuperacion.md) para alcance, cantidades y resultados.
+
+El respaldo incluye tablas y registros administrados por las migraciones; no incluye roles del servidor ni archivos externos. El keyring se conserva por separado. La pérdida de claves impide recuperar datos cifrados.
+
+Quedan como operación continua: respaldos periódicos, acceso restringido al panel de Seenode/Neon, revisión de trabajos fallidos, actualización de dependencias y pruebas de carga antes de crecer. La eliminación/anonimización de una cuenta completa no está automatizada; debe aplicarse una política de retención y atención a solicitudes de datos. Los proveedores de pago requieren pruebas reales con credenciales del negocio antes de habilitar cobros.

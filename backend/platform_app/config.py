@@ -1,7 +1,7 @@
 import json
 from functools import lru_cache
 from typing import Literal
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,7 +26,13 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:3000"
     session_ttl_seconds: int = 1800
     init_data_max_age_seconds: int = 300
-    trial_days: int = 7
+    trial_days: int = Field(default=3, ge=1, le=3)
+    billing_grace_days: int = Field(default=3, ge=0, le=14)
+    background_workers: int = Field(default=2, ge=1, le=8)
+    interactive_workers: int = Field(default=2, ge=1, le=8)
+    payment_webhooks_enabled: bool = False
+    telegram_transport: Literal["polling", "webhook"] = "polling"
+    port: int = Field(default=8000, ge=1, le=65535)
     storage_path: str = "./storage"
     receipt_storage: Literal["filesystem", "database"] = "filesystem"
     max_upload_bytes: int = 5 * 1024 * 1024
@@ -39,6 +45,13 @@ class Settings(BaseSettings):
     global_rps: int = 300
     user_rps: int = 1
 
+    @field_validator("trial_days", mode="before")
+    @classmethod
+    def migrate_legacy_trial_setting(cls, value):
+        # Existing single-worker deployments supplied 7. New trials are always
+        # three days; an already-started historical trial keeps its stored end.
+        return 3 if value in (7, "7") else value
+
     @property
     def owner_ids(self) -> set[int]:
         return {int(x.strip()) for x in self.platform_owner_ids.split(",") if x.strip()}
@@ -46,6 +59,15 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def production_guard(self):
         if self.environment == "production":
+            if (
+                self.payment_webhooks_enabled or self.telegram_transport == "webhook"
+            ) and not self.public_api_url.startswith("https://"):
+                raise ValueError("Webhook ingress requires a public HTTPS URL")
+            if (
+                self.telegram_transport == "webhook"
+                and len(self.master_webhook_secret.get_secret_value()) < 32
+            ):
+                raise ValueError("Master webhook secret is required")
             if self.demo_enabled or not self.database_url.get_secret_value().startswith("postgresql"):
                 raise ValueError("Production requires PostgreSQL and demo disabled")
             if not self.system_database_url:

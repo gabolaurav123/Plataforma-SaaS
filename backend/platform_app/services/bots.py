@@ -11,8 +11,10 @@ from ..models import (
     Plan,
     PlanPrice,
     ProviderConfig,
+    BotPaymentMethod,
     TenantMember,
     SaaSPlan,
+    PlatformUser,
     now,
     uid,
 )
@@ -66,7 +68,16 @@ class TelegramBotManager:
             )
         client = self.r.clients.master()
         if self.r.settings.deployment_mode == "telegram":
-            client.call("deleteWebhook", drop_pending_updates=False)
+            if self.r.settings.telegram_transport == "polling":
+                client.call("deleteWebhook", drop_pending_updates=False)
+            else:
+                client.call(
+                    "setWebhook",
+                    url=f"{self.r.settings.public_api_url}/telegram/webhook/master",
+                    secret_token=self.r.settings.master_webhook_secret.get_secret_value(),
+                    allowed_updates=MASTER_UPDATES,
+                    drop_pending_updates=False,
+                )
             client.call(
                 "setMyCommands",
                 commands=[
@@ -242,6 +253,19 @@ class TelegramBotManager:
             )
 
     def refresh_secret(self, session, bot, rotate=False):
+        if bot.connection_kind == "TOKEN":
+            if rotate:
+                raise DomainError(
+                    "BOTFATHER_ROTATION_REQUIRED",
+                    "Revoca el token en BotFather y usa Reemplazar token para conectar el nuevo.",
+                    409,
+                )
+            secret = session.scalar(
+                select(BotSecret).where(BotSecret.bot_id == bot.id, BotSecret.tenant_id == bot.tenant_id)
+            )
+            if not secret:
+                raise DomainError("TOKEN_REQUIRED", "Conecta de nuevo el token de BotFather.", 409)
+            return secret
         if bot.status == "OWNERSHIP_CHANGED":
             raise DomainError("OWNERSHIP_CHANGED", "Se requiere revisar el cambio de propietario.", 409)
         method = "replaceManagedBotToken" if rotate else "getManagedBotToken"
@@ -287,6 +311,8 @@ class ManagedBotProvisioner:
             bot = session.get(ManagedBot, bot_id)
             if not bot:
                 return
+            if bot.status == "DISCONNECTED":
+                return
             self.r.manager.refresh_secret(session, bot, rotate)
         try:
             with self.r.db.system() as session:
@@ -302,6 +328,7 @@ class ManagedBotProvisioner:
                         bot_id=bot.id,
                         commands=[
                             {"command": "start", "description": "Inicio"},
+                            {"command": "admin", "description": "Administrar mi negocio"},
                             {"command": "plans", "description": "Ver planes"},
                             {"command": "support", "description": "Contactar soporte"},
                             {"command": "paysupport", "description": "Ayuda con pagos"},
@@ -318,7 +345,10 @@ class ManagedBotProvisioner:
                 webhook_secret = self.r.vault.decrypt(
                     secret.webhook_ciphertext, f"{bot.tenant_id}:{bot.id}:webhook"
                 )
-                if self.r.settings.deployment_mode == "telegram":
+                if (
+                    self.r.settings.deployment_mode == "telegram"
+                    and self.r.settings.telegram_transport == "polling"
+                ):
                     client.call("deleteWebhook", drop_pending_updates=False)
                 else:
                     client.call(
@@ -338,10 +368,11 @@ class ManagedBotProvisioner:
                         session,
                         None,
                         bot.owner_telegram_user_id,
-                        f"✅ @{bot.username} está conectado. Abre /start aquí para configurarlo y publicarlo.",
+                        f"✅ @{bot.username} está conectado. Abre tu propio bot y pulsa /start para administrar tu negocio.",
                         f"native-provisioned:{bot.id}",
                     )
                 audit(session, bot.tenant_id, "system", "BOT_PROVISIONED", bot.id)
+            self.r.bot_config_changed.set()
         except DomainError as error:
             with self.r.db.system() as session:
                 bot = session.get(ManagedBot, bot_id)
@@ -381,7 +412,7 @@ class ManagedBotProvisioner:
         expected = f"{self.r.settings.public_api_url}/telegram/webhook/{bot.public_id}"
         menu = client.call("getChatMenuButton")
         native = self.r.settings.deployment_mode == "telegram"
-        if native:
+        if native and self.r.settings.telegram_transport == "polling":
             expected = ""
         menu_ok = (
             menu.get("type") == "commands"
@@ -404,7 +435,7 @@ class ManagedBotProvisioner:
             "identity_ok": me["id"] == bot.telegram_bot_id,
             "webhook_ok": webhook.get("url") == expected,
             "menu_ok": menu_ok,
-            "transport": "polling" if native else "webhook",
+            "transport": self.r.settings.telegram_transport if native else "webhook",
             "pending_updates": webhook.get("pending_update_count", 0),
             "last_webhook_error_at": webhook.get("last_error_date"),
             "channel_permissions_ok": all(c.status == "CONNECTED" for c in channels),
@@ -422,41 +453,58 @@ class ManagedBotProvisioner:
         return health
 
     def readiness(self, session, bot):
+        from .texts import bot_text
+
         settings = session.scalar(select(BotSettings).where(BotSettings.bot_id == bot.id))
         plans = list(session.scalars(select(Plan).where(Plan.bot_id == bot.id, Plan.active.is_(True))))
-        stars = session.scalar(
-            select(ProviderConfig).where(
-                ProviderConfig.tenant_id == bot.tenant_id,
-                ProviderConfig.provider == "TELEGRAM_STARS",
-                ProviderConfig.enabled.is_(True),
+        configs = {
+            row.provider: row.enabled
+            for row in session.scalars(
+                select(ProviderConfig).where(ProviderConfig.tenant_id == bot.tenant_id)
             )
+        }
+        configs.update(
+            {
+                row.provider: row.enabled
+                for row in session.scalars(
+                    select(BotPaymentMethod).where(
+                        BotPaymentMethod.tenant_id == bot.tenant_id, BotPaymentMethod.bot_id == bot.id
+                    )
+                )
+            }
         )
         prices = (
             list(
                 session.scalars(
                     select(PlanPrice).where(
                         PlanPrice.plan_id.in_([p.id for p in plans]),
-                        PlanPrice.provider == "TELEGRAM_STARS",
-                        PlanPrice.currency == "XTR",
                     )
                 )
             )
             if plans
             else []
         )
-        valid_plans = bool(plans) and all(any(price.plan_id == p.id for price in prices) for p in plans)
+        valid_plans = bool(plans) and all(
+            any(
+                price.plan_id == p.id
+                and configs.get(price.provider)
+                and (
+                    p.product_kind != "DIGITAL"
+                    or price.provider == "TELEGRAM_STARS"
+                    and price.currency == "XTR"
+                )
+                for price in prices
+            )
+            for p in plans
+        )
         channels = list(session.scalars(select(Channel).where(Channel.bot_id == bot.id)))
         checks = {
-            "managed_bot": bot.status != "OWNERSHIP_CHANGED",
+            "managed_bot": bot.status not in {"OWNERSHIP_CHANGED", "DISCONNECTED", "CONNECTION_ERROR"},
             "token": bool(session.scalar(select(BotSecret.id).where(BotSecret.bot_id == bot.id))),
             "webhook": bot.health.get("webhook_ok", False),
-            "welcome": bool(
-                session.scalar(
-                    select(BotText.value).where(BotText.bot_id == bot.id, BotText.key == "WELCOME")
-                )
-            ),
+            "welcome": bool(bot_text(session, bot, "WELCOME")),
             "plan": valid_plans,
-            "payment_method": bool(stars),
+            "payment_method": any(configs.values()),
             "channel_permissions": all(c.status == "CONNECTED" for c in channels),
             "support_and_policies": bool(
                 settings
@@ -468,12 +516,15 @@ class ManagedBotProvisioner:
         return {"checks": checks, "ready": all(checks.values())}
 
     def publish(self, session, bot, actor_id):
+        from .i18n import t
+
         entitlement(session, bot.tenant_id)
         health = self.health(session, bot)
+        actor = session.get(PlatformUser, actor_id)
         self.r.clients.child(session, bot).call(
             "sendMessage",
             chat_id=bot.owner_telegram_user_id,
-            text="✅ Prueba de configuración completada. Tu bot está preparado para publicarse.",
+            text=t("publish_test_notice", actor.locale if actor else "es"),
         )
         bot.health = {**health, "test_message_sent": True}
         readiness = self.readiness(session, bot)

@@ -1,6 +1,6 @@
 [project]
 name = "telegram-creator-platform"
-version = "0.1.0"
+version = "0.2.0"
 description = "Central multi-tenant Telegram creator subscription platform"
 requires-python = ">=3.13"
 dependencies = [

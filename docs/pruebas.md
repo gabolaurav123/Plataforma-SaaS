@@ -1,25 +1,39 @@
-# Pruebas de la versión solo Telegram · 6 de septiembre de 2026
+# Pruebas de la actualización comercial · 6 de septiembre de 2026
 
-**85 pruebas aprobadas** en Python 3.14.3, 110,93 segundos. Incluyen 21 pruebas nuevas del modo Telegram. Cobertura de sentencias del conjunto: **77.92%**. Telegram está simulado; no se hicieron cobros reales.
+**135 pruebas aprobadas**, 228,99 segundos, Python 3.14.3. Cobertura de sentencias: **71.08%**. La API de Telegram y los procesadores de pagos se simulan; no se hicieron cobros reales.
 
 | Comprobación | Resultado |
 |---|---|
-| Suite completa de backend | 85 aprobadas |
+| Suite completa de backend | 135 aprobadas; 0 fallos |
 | Ruff | Sin errores |
-| Instalación del paquete editable | Correcta |
-| Alembic SQLite hasta 0004 y `alembic check` | Sin diferencias de esquema |
-| DDL PostgreSQL y aislamiento PGlite 17.5 | 12 comprobaciones aprobadas |
-| Neon real, proyecto Telegram Saas, neondb | Migración 0004 y límite de permisos verificados |
-| Worker único con proveedor simulado | Recibe, persiste y responde un mensaje; termina al recibir parada |
-| Recepción sin actividad | Los polls vacíos no consultan PostgreSQL |
-| Web y Mini Apps | Código conservado para una fase posterior; no forma parte del servicio actual |
+| Migración SQLite con datos de 0004 a 0005 y Alembic check | Datos conservados; sin diferencias de esquema; 0 errores de claves foráneas |
+| PostgreSQL PGlite 17.5, RLS y límites de privilegios | 13 comprobaciones aprobadas |
+| PostgreSQL, migración con registros anteriores | 7 comprobaciones aprobadas |
+| Copia cifrada real de la nueva base Neon | 51 tablas y 113 registros restaurados; igualdad de todas las filas; actualización aislada a 0005 |
+| Frontend opcional conservado | Check, build y build:seenode aprobados; auditoría npm sin vulnerabilidades |
+| Navegación de negocio | Destinos de los 20 botones principales probados en español, inglés y portugués |
+| Rendimiento | Comparación local y reutilización HTTP documentadas; sin prueba de carga real en Seenode |
 
-Se comprobaron creación nativa, botones privados vinculados a usuario y bot, acceso cruzado entre negocios, revocación de roles, recuperación de asistentes tras reinicio, creación de planes, checkout Stars, publicación, equipo, campañas con confirmación, recordatorios, soporte y administración. También la persistencia de offsets y trabajos en una misma transacción, entrega repetida sin duplicación, ausencia de confirmación ante fallos de almacenamiento, respuesta rápida de pre-checkout y parada ante conflicto de polling.
+## Recorridos cubiertos
 
-Las 12 comprobaciones PostgreSQL cubren RLS, claves compuestas, restauración de snapshot y denegación de acceso a diálogos, botones, sesiones y cursores privados desde el rol de API. Las pruebas previas de pagos, renovación, comprobantes, accesos y reembolsos siguen pasando.
+Alta, prueba explícita de tres días y uso único por propietario; validación de token sin conectar antes de confirmar; cifrado y reemplazo; separación entre negocios y entre bots del mismo espacio; roles y revocación durante asistentes pendientes.
 
-Se observaron avisos de deprecación de Starlette/AnyIO y un aviso del cierre de una conexión SQLite en pruebas. No se midió capacidad sostenida ni latencia bajo tráfico real. El límite inicial de 20 bots es configurable y no constituye una garantía de rendimiento de una instancia Basic.
+Planes y precios, pagos Stars, transferencias con comprobantes, aprobación repetida, reembolsos parciales, renovación, expiración, accesos personales, invitaciones gratuitas sin pagos artificiales y límites de usos. Stripe y PayPal verifican firmas y estado mediante HTTP simulado, con eventos repetidos e importes incorrectos.
 
-Antes de recibir clientes, probar desde Telegram con el nuevo Master: creación de un bot hijo, configuración, publicación, pago de prueba autorizado por el propietario, enlace personal, vencimiento, cancelación de renovación y reembolso. Mantener una sola réplica y comprobar los logs tras el despliegue. Ver [guía Seenode](seenode.md) y [menús](telegram.md).
+Facturación a 30 días, USD 30 más el 4% de USD 1.000 igual a USD 70; ventas, devoluciones y recursos reales en el resumen; tasas históricas; conversión pendiente sin saldo inventado; cambio de plan al siguiente ciclo; liquidaciones parciales, ajustes y suspensión administrativa que no se levanta automáticamente por pagar.
 
-Los resultados de esta ejecución están en [test-summary.json](test-summary.json). El archivo histórico `test-output.txt` corresponde a una ejecución anterior del modo web.
+Difusiones con foto y botones: editor, vista previa, confirmación, exclusión de opt-out y otro bot, cola, envío confirmado y rechazo de confirmación repetida. Plantillas editadas/restauradas por idioma; bienvenida predeterminada compatible con publicación. Instrucciones de banco y cripto persistentes y protegidas por permisos. Aviso VIP sin repetición, cancelación notificada y resúmenes configurables.
+
+Reportes con capturas y devoluciones en sus periodos, monedas separadas, CSV aislado y caduco, MRR limitado a renovaciones automáticas compatibles, churn histórico tras cancelación y reactivación e históricos incompletos mostrados como N/D. Fechas locales y cambio de horario estacional.
+
+Cola interactiva adelantada a 300 trabajos de fondo, persistencia transaccional de offsets, tareas idempotentes, manejo de 429 y entregas desconocidas, conflictos de polling, errores seguros y recepción vacía sin consultas SQL.
+
+## Alcance de la evidencia
+
+La cobertura no es del 100% y estas pruebas no demuestran que todo escenario de red, proveedor o carga haya sido validado. Se observaron dos avisos de deprecación de Starlette/AnyIO; no son fallos de la suite. GitHub ejecuta además los checks en Python 3.13 al publicar cada revisión.
+
+La restauración usó datos reales de la base nueva en un PostgreSQL aislado; no cambió Neon. El despliegue de esta revisión requiere verificar la migración 0005, los permisos reales y el Worker activo. La revisión activa y el estado de GitHub deben consultarse en el informe de entrega del despliegue.
+
+Los pagos live y el flujo de venta con un bot/canal real requieren credenciales y una operación del propietario. Stripe/PayPal permanecen desactivados en el Worker sin entrada HTTPS. Las instrucciones de transferencia/cripto de la plataforma aún deben completarse desde Telegram.
+
+Resultados: [test-summary.json](test-summary.json), [salida de pytest](test-output.txt), [JUnit](test-results.xml), [mediciones](rendimiento.md).

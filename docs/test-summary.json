@@ -1,23 +1,31 @@
 {
   "date": "2026-09-06",
   "deployment_mode": "telegram",
-  "pytest_passed": 85,
-  "pytest_seconds": 110.93,
+  "python_local": "3.14.3",
+  "python_ci_and_seenode": "3.13",
+  "pytest_passed": 135,
+  "pytest_seconds": 228.99,
   "coverage_statements": {
-    "covered_lines": 3059,
-    "num_statements": 3926,
-    "percent_covered": 77.91645440652063,
-    "percent_covered_display": "78",
-    "missing_lines": 867,
+    "covered_lines": 5250,
+    "num_statements": 7386,
+    "percent_covered": 71.0804224207961,
+    "percent_covered_display": "71",
+    "missing_lines": 2136,
     "excluded_lines": 18,
-    "percent_statements_covered": 77.91645440652063,
-    "percent_statements_covered_display": "78"
+    "percent_statements_covered": 71.0804224207961,
+    "percent_statements_covered_display": "71"
   },
-  "postgres_embedded_checks": 12,
+  "postgres_embedded_checks": 13,
+  "postgres_populated_migration_checks": 7,
   "postgres_embedded_version": "17.5",
-  "migration": "0004",
-  "native_telegram_tests": 21,
-  "telegram_provider": "simulated",
-  "neon_actual_database_boundary": "verified after migration 0004",
-  "real_telegram_acceptance": "pending deployment and live user test"
+  "migration": "0005",
+  "telegram_and_payment_providers": "simulated in tests; live provider payments not performed",
+  "actual_neon_backup": {
+    "source_migration": "0004",
+    "tables": 51,
+    "rows": 113,
+    "all_rows_equal_after_restore": true,
+    "isolated_upgrade_verified": true
+  },
+  "production_update": "pending deployment of this revision; existing Worker still uses 0004"
 }

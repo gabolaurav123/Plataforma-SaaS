@@ -9,6 +9,7 @@ class PlatformUser(Record, Base):
     first_name: Mapped[str] = mapped_column(String(128))
     username: Mapped[str | None] = mapped_column(String(64))
     locale: Mapped[str] = mapped_column(String(8), default="es")
+    trial_used_at: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class Tenant(Record, Base):
@@ -17,6 +18,7 @@ class Tenant(Record, Base):
     owner_user_id: Mapped[str] = mapped_column(ForeignKey("platform_users.id"))
     status: Mapped[str] = mapped_column(String(30), default="TRIAL")
     suspended_at: Mapped[int | None] = mapped_column(BigInteger)
+    admin_suspended_at: Mapped[int | None] = mapped_column(BigInteger)
     deleted_at: Mapped[int | None] = mapped_column(BigInteger)
 
 
@@ -68,6 +70,8 @@ class ManagedBot(Scoped, Base):
     last_update_at: Mapped[int | None] = mapped_column(BigInteger)
     health: Mapped[dict] = mapped_column(JSON, default=dict)
     last_error_code: Mapped[str | None] = mapped_column(String(60))
+    connection_kind: Mapped[str] = mapped_column(String(20), default="MANAGED")
+    disconnected_at: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class BotSecret(Scoped, Base):
@@ -94,6 +98,7 @@ class BotSettings(Scoped, Base):
     template: Mapped[str] = mapped_column(String(40), default="creator_subscription")
     support_username: Mapped[str] = mapped_column(String(64), default="")
     remove_expired_members: Mapped[bool] = mapped_column(Boolean, default=True)
+    preferences: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class BotText(Scoped, Base):

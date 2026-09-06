@@ -1,132 +1,52 @@
-# Arquitectura A–K
+# Arquitectura de la plataforma Telegram
 
-> Actualización: la fase activa funciona con un único Worker, sin web, Mini App ni Redis. Ver [Seenode](seenode.md) y [menús de Telegram](telegram.md). El detalle del modo web que sigue se conserva como referencia para una fase posterior.
+## Proceso y responsabilidades
 
-
-Decisiones presentadas antes de programar y concretadas en esta implementación. Versión inicial 0.1.0.
-
-## A. Stack
-
-Python/FastAPI para una API central, SQLAlchemy 2 y Alembic para PostgreSQL, Redis para límites distribuidos y caché, y workers con trabajos persistentes en PostgreSQL. React 19/TypeScript con Sites y componentes shadcn para las dos Mini Apps. SQLite se limita al desarrollo y a pruebas rápidas.
-
-La cola y el outbox viven junto a los cambios de negocio: así una confirmación de pago y su trabajo de acceso se confirman en una misma transacción. Se evita depender de una publicación Redis separada que pudiera perderse después del commit.
-
-## B. Arquitectura
+`polling.py` coordina lectores por token, consumidores de cola y mantenimiento. El modo actual no inicia FastAPI ni Redis. `runtime.py` comparte clientes HTTP persistentes, proveedores, cifrado y conexiones SQL. El listener opcional de `ingress.py` recibe únicamente confirmaciones cuando se habilita una URL HTTPS.
 
 ```mermaid
-flowchart TD
-    Creator[Creador en Telegram] --> Master[Master Bot]
-    Master --> CreatorUI[Master Mini App]
-    CreatorUI --> BFF[Interfaz Sites / API proxy]
-    Customer[Cliente en Telegram] --> Child[Managed Bot del creador]
-    Child --> CustomerUI[Customer Mini App]
-    CustomerUI --> BFF
-    BFF --> API[FastAPI central]
-    Master --> Hooks[Webhook Master]
-    Child --> Multi[Webhook por public_id]
-    Hooks --> API
-    Multi --> API
-    API --> DB[(PostgreSQL multi-tenant)]
-    DB --> Jobs[Workers compartidos]
-    Jobs --> TG[Telegram Bot API]
-    Jobs --> Redis[(Límites y caché Redis)]
-    API --> Vault[Cifrado de secretos y comprobantes]
+flowchart LR
+  M[Bot maestro] --> I[Updates verificados]
+  B[Bots de negocios] --> I
+  I --> Q[Cola interactiva]
+  Q --> C[Menús y permisos por bot]
+  C --> J[Trabajos de fondo]
+  J --> P[Pagos y accesos]
+  J --> R[Campañas y reportes]
+  J --> F[Facturación SaaS]
+  Q --> D[(Neon PostgreSQL)]
+  J --> D
+  P --> T[Telegram y proveedores]
 ```
 
-Un bot es una fila de identidad y configuración, nunca una copia de código. El API y los workers se pueden replicar; todos comparten PostgreSQL, Redis y el almacenamiento de comprobantes. El almacenamiento local cifrado requiere un volumen compartido entre réplicas; un adaptador de objetos es una evolución posterior.
+## Aislamiento
 
-## C. Modelo de datos
+Las tablas operativas incluyen `tenant_id`, RLS forzada y claves foráneas compuestas. Las operaciones de consola verifican además `bot_id`, incluso entre dos bots del mismo propietario. Canales, ofertas, planes, pagos, comprobantes y credenciales se resuelven bajo ese contexto. Un administrador de un bot no hereda automáticamente acceso a otro.
 
-47 tablas de aplicación, 42 con `tenant_id`. El DDL reproducible está en [schema-postgres.sql](schema-postgres.sql). `alembic_version` es una tabla adicional del migrador.
+El rol `platform_api` es limitado y no puede acceder a sesiones privadas, botones, cursores o ajustes globales, ni escribir directamente los libros financieros y sus historiales. El rol de sistema se reserva para los procesos de confianza. Las consultas del superadministrador son explícitas y auditadas.
 
-| Área | Entidades principales |
-|---|---|
-| Identidad | PlatformUser, Tenant, TenantMember, AuthSession, Onboarding |
-| Bots | BotCreationRequest, ManagedBot, BotSecret, BotSettings, BotText |
-| Comercio | Channel, Plan, PlanPrice, ProviderConfig, Payment, PaymentCharge, PaymentAttempt, BankReceipt, Subscription, ChannelInvite |
-| CRM | Contact, Conversation, Message, InternalNote, Tag, ContactTag, CRMTask |
-| Crecimiento | Campaign, CampaignRecipient, AutomationRule, AutomationExecution, Coupon, CouponRedemption, Referral, AttributionLink |
-| Infraestructura | Event, Job, TelegramUpdate, ProviderEvent, AuditLog |
-| Plataforma | SaaSPlan, SaaSSubscription, SaaSInvoice, SaaSCharge, FeatureFlag, UsageCounter, PlatformSupportTicket |
+OWNER, ADMIN, SUPPORT, FINANCE, MODERATOR y CUSTOM delimitan funciones. Nadie puede otorgar permisos que no tiene, salvo el propietario autorizado de la plataforma. Las acciones sensibles vuelven a comprobar permisos al ejecutar un trabajo o entregar un reporte.
 
-```mermaid
-erDiagram
-    PLATFORM_USER ||--o{ TENANT_MEMBER : pertenece
-    TENANT ||--o{ TENANT_MEMBER : autoriza
-    TENANT ||--o{ MANAGED_BOT : administra
-    MANAGED_BOT ||--|| BOT_SECRET : cifra
-    MANAGED_BOT ||--o{ CHANNEL : conecta
-    MANAGED_BOT ||--o{ PLAN : ofrece
-    MANAGED_BOT ||--o{ CONTACT : conoce
-    CONTACT ||--o{ PAYMENT : paga
-    PAYMENT ||--o{ PAYMENT_CHARGE : confirma
-    CONTACT ||--o{ SUBSCRIPTION : obtiene
-    PLAN ||--o{ SUBSCRIPTION : define
-    SUBSCRIPTION ||--o{ CHANNEL_INVITE : permite
-    TENANT ||--|| SAAS_SUBSCRIPTION : contrata
-```
+## Persistencia e idempotencia
 
-## D. Flujo
+Los updates, offsets, formularios, navegación, botones y trabajos persisten en PostgreSQL. Los botones son opacos, caducan, pertenecen a actor y bot y solo se consumen una vez. El texto privado entrante se cifra en tránsito dentro de la cola y se descarta al completar su procesamiento.
 
-```mermaid
-sequenceDiagram
-    participant C as Creador
-    participant M as Master Mini App
-    participant A as API
-    participant T as Telegram
-    participant W as Worker
-    C->>M: Abre desde el Master
-    M->>A: initData firmado
-    A-->>M: Sesión y espacios autorizados
-    M->>A: Solicita creación en su espacio
-    A->>T: savePreparedKeyboardButton
-    M->>T: requestChat / enlace oficial newbot
-    T->>A: managed_bot / managed_bot_created
-    A->>W: Provisioning persistente
-    W->>T: Obtiene token, verifica identidad, configura bot
-    W-->>A: READY
-    C->>M: Marca, textos, canal, plan, políticas
-    M->>A: Publicar
-    A->>T: Prueba de webhook, menú, permisos y mensaje
-    A-->>M: Checklist y enlace del bot publicado
-```
+La deduplicación usa índices únicos e inserciones `ON CONFLICT`, bloqueos de filas en operaciones financieras y claves de idempotencia de los proveedores. Los reembolsos bloquean primero pago y después cargo, evitando un orden de bloqueo contradictorio.
 
-## E. Managed Bots
+Los trabajos se separan en colas interactivas y de fondo. Cada tenant recibe turnos y los mensajes de una conversación mantienen orden. Los trabajos con arrendamiento vencido pueden recuperarse; el trabajo se bloquea durante su ejecución. Una entrega de Telegram incierta se registra como `DELIVERY_UNKNOWN`; no se vuelve a enviar ciegamente.
 
-Se comprueba la capacidad del Master. Las credenciales del child se obtienen únicamente en el servidor. La solicitud pendiente se correlaciona con el propietario que Telegram certifica, sin confiar en un tenant suministrado por el cliente. Existe una solicitud vigente por creador.
+## Módulos comerciales
 
-Un cambio de propietario pone el bot en `OWNERSHIP_CHANGED` y lo despublica. Sus contactos, pagos y secretos no se trasladan al nuevo dueño. La rotación guarda el nuevo token cifrado antes de reconfigurar el webhook; los reintentos posteriores recuperan el token actual en lugar de volver a rotarlo.
+- `connections`: alta, token, validación, sustitución y desconexión.
+- `business`: planes, canales comprados, historial, permisos e invitaciones.
+- `billing_ledger`: ciclos, tasas históricas, conversiones, facturas, liquidaciones y concesiones.
+- `payment_methods`, `external_payments`, `receipts`, `refunds`: medios del negocio, firmas, revisión y devoluciones.
+- `growth`: audiencias SQL, instantánea de destinatarios y envío por lotes.
+- `reporting`, `notifications`: estadísticas transaccionales, CSV cifrado y resúmenes programados.
+- `console_*`, `i18n`, `ui_catalog`: diálogos, menús y textos compartidos.
 
-## F. Webhook multi-bot
+## Evolución
 
-`/telegram/webhook/master` recibe al Master; `/telegram/webhook/{public_id}` resuelve la identidad del child por un índice único. El token nunca aparece en la ruta. Se verifica el secret header, se deduplica por bot/update y se persiste un trabajo. El pre-checkout se resuelve por una ruta inmediata para respetar el plazo de Telegram, sin esperar detrás de campañas.
+La migración `0005` añade el modelo comercial, índices y políticas. Conserva pagos, fechas, canales y claves cifradas; importa ventas anteriores con comisión cero, evita reutilizar pruebas y asigna administradores existentes a sus bots. Una reversión financiera destructiva no es automática: se utiliza una copia verificada.
 
-La resolución por ID se probó con 100, 1.000 y 10.000 registros. Esto no mide la capacidad sostenida de un despliegue real.
-
-## G. Cifrado
-
-Cada valor se cifra con una clave de datos aleatoria AES-256-GCM. Una clave versionada envuelve esa clave. El contexto autenticado incluye tenant, bot o proveedor y propósito; copiar un ciphertext entre contextos impide descifrarlo.
-
-`LocalKeyring` es el adaptador implementado; el contrato `KeyWrapper` permite KMS. Las claves de envoltura deben guardarse en un gestor de secretos. No existe una integración KMS de nube ni una re-envoltura masiva automática en esta entrega.
-
-## H. Aislamiento
-
-El servidor revalida la membresía y rol en cada petición. La URL selecciona un espacio, pero no concede acceso. `TenantSession` aplica filtros ORM y valida escrituras; las relaciones críticas usan claves foráneas compuestas con tenant. PostgreSQL añade RLS forzado con `SET LOCAL app.tenant_id` dentro de la transacción.
-
-El rol API no puede administrar el esquema ni saltarse RLS. El arranque de producción verifica estas condiciones. Una conexión privilegiada separada queda reservada para autenticación, routing, workers y operaciones auditadas del propietario. Esa superficie debe seguir siendo pequeña y revisada; RLS no protege contra una credencial de sistema comprometida.
-
-## I. Canales
-
-El creador añade el bot por un enlace oficial. Se verifica quién lo añadió y sus permisos. El acceso propio usa invitaciones temporales que generan solicitud de ingreso, validada contra el usuario exacto y su suscripción vigente. Se revoca el enlace después del ingreso.
-
-Al vencer se conservan otros derechos vigentes sobre el mismo canal y nunca se expulsa automáticamente a un administrador. El modo nativo de suscripción de canal se mantiene separado: no se mezclan sus vencimientos con los del motor propio. Un canal físico no debe administrarse desde dos bots de esta plataforma.
-
-## J. Pagos
-
-El checkout del cliente fija Stars/XTR para productos digitales. Cada pago conserva precio y duración como snapshot; los cambios de plan no reescriben cargos anteriores. Se valida bot, usuario, payload, importe y moneda. La tabla de cargos impide aplicar dos veces un cargo Telegram.
-
-Los eventos recurrentes usan el vencimiento autoritativo comunicado por Telegram; un evento viejo no extiende el periodo. Cancelar renovación conserva lo ya pagado. Los comprobantes de pedidos externos se normalizan, cifran y comparan por SHA-256 y dHash; una coincidencia exige revisión, no prueba fraude.
-
-## K. Fases
-
-Se implementó funcionalidad en las once fases solicitadas. La cobertura y los pendientes se detallan en [estado.md](estado.md); tener tablas o una interfaz de proveedor no equivale a tener una integración operativa.
+El diseño identifica trabajos y servicios por tenant y bot para particionar consumidores en el futuro. La instancia pequeña actual no representa un despliegue para miles de bots. Polling requiere un único lector por token; para crecer se necesita medir carga, pasar a webhooks y ampliar consumidores y límites de base sin perder idempotencia.
