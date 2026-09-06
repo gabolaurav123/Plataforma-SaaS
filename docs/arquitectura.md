@@ -1,5 +1,8 @@
 # Arquitectura A–K
 
+> Actualización: la fase activa funciona con un único Worker, sin web, Mini App ni Redis. Ver [Seenode](seenode.md) y [menús de Telegram](telegram.md). El detalle del modo web que sigue se conserva como referencia para una fase posterior.
+
+
 Decisiones presentadas antes de programar y concretadas en esta implementación. Versión inicial 0.1.0.
 
 ## A. Stack

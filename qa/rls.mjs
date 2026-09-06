@@ -8,6 +8,7 @@ await db.exec(`
   CREATE ROLE tenant_api_test NOLOGIN NOSUPERUSER NOBYPASSRLS;
   GRANT USAGE ON SCHEMA public TO tenant_api_test;
   GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO tenant_api_test;
+  REVOKE ALL ON console_states, console_buttons, poll_cursors, auth_sessions FROM tenant_api_test;
   INSERT INTO platform_users(id,created_at,updated_at,telegram_user_id,first_name,locale) VALUES
     ('u-a',1,1,101,'A','es'),('u-b',1,1,202,'B','es');
   INSERT INTO tenants(id,created_at,updated_at,name,owner_user_id,status) VALUES
@@ -22,6 +23,11 @@ await db.exec(`
 `);
 const checks = [];
 async function check(name, fn) { await fn(); checks.push(name); }
+await check('API role cannot access private Telegram state or polling cursors', async () => {
+  for (const table of ['console_states', 'console_buttons', 'poll_cursors', 'auth_sessions']) {
+    await assert.rejects(db.query(`select * from ${table}`), /permission denied/);
+  }
+});
 await check('No scope returns no tenant rows', async () => {
   const result = await db.query('select * from contacts'); assert.equal(result.rows.length, 0);
 });

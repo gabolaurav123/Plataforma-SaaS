@@ -50,6 +50,8 @@ class BodyLimit:
 
 def create_app(runtime=None):
     r = runtime or Runtime()
+    if r.settings.deployment_mode == "telegram":
+        raise RuntimeError("El modo Telegram se inicia con python -m platform_app.polling, sin servidor web.")
 
     @asynccontextmanager
     async def lifespan(app):

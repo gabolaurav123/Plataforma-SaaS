@@ -8,6 +8,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.13'}
       - run: pip install -r requirements.lock
+      - run: pip install --no-deps -e .
       - run: ruff check backend tests
       - run: pytest --cov=platform_app
       - run: python scripts/bootstrap.py

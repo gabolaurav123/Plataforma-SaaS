@@ -3,3 +3,4 @@ from .identity import *  # noqa: F403
 from .commerce import *  # noqa: F403
 from .crm import *  # noqa: F403
 from .operations import *  # noqa: F403
+from .console import *  # noqa: F403

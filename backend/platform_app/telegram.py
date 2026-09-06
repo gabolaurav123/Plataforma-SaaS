@@ -26,7 +26,8 @@ class BotClient:
             raise TelegramError("MASTER_NOT_CONFIGURED", "Falta configurar el Master Bot.", 503)
         base = f"https://api.telegram.org/bot{self._token}/{'test/' if self.test_environment else ''}"
         try:
-            with httpx.Client(timeout=8, transport=self.transport, follow_redirects=False) as client:
+            timeout = parameters.get("timeout", 25) + 8 if method == "getUpdates" else 8
+            with httpx.Client(timeout=timeout, transport=self.transport, follow_redirects=False) as client:
                 if files:
                     data = {
                         k: json.dumps(v) if isinstance(v, (dict, list, bool)) else str(v)
@@ -44,9 +45,12 @@ class BotClient:
             code = result.get("error_code", response.status_code)
             if code == 429:
                 raise RetryLater(int(result.get("parameters", {}).get("retry_after", 5)))
-            safe_code = {401: "TOKEN_INVALID", 403: "TELEGRAM_FORBIDDEN", 400: "TELEGRAM_BAD_REQUEST"}.get(
-                code, "TELEGRAM_API_ERROR"
-            )
+            safe_code = {
+                401: "TOKEN_INVALID",
+                403: "TELEGRAM_FORBIDDEN",
+                400: "TELEGRAM_BAD_REQUEST",
+                409: "POLLING_CONFLICT",
+            }.get(code, "TELEGRAM_API_ERROR")
             raise TelegramError(
                 safe_code, "Telegram rechazó la operación. Revisa el estado y los permisos del bot.", 502
             )

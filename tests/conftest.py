@@ -69,6 +69,8 @@ class FakeTelegram:
                     return {"invite_link": f"https://t.me/+test{api.invites}"}
                 if method == "getWebhookInfo":
                     for bid, action, data in reversed(api.calls):
+                        if bid == bot_id and action == "deleteWebhook":
+                            return {"url": "", "pending_update_count": 0}
                         if bid == bot_id and action == "setWebhook":
                             return {"url": data["url"], "pending_update_count": 0}
                     return {"url": "", "pending_update_count": 0}

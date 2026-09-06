@@ -101,6 +101,14 @@ class Database:
             }
             if dangerous or not expected.issubset(protected):
                 raise RuntimeError("API database role or tenant RLS is unsafe")
+            for private_table in ["console_states", "console_buttons", "poll_cursors", "auth_sessions"]:
+                if connection.scalar(
+                    text(
+                        "SELECT has_table_privilege(current_user, :table_name, 'SELECT,INSERT,UPDATE,DELETE')"
+                    ),
+                    {"table_name": private_table},
+                ):
+                    raise RuntimeError("Private routing tables must be inaccessible to the API database role")
 
 
 def get_scoped(session, model, entity_id, tenant_id):

@@ -1,5 +1,8 @@
 # Estado real de la entrega
 
+> Actualización: la fase activa funciona con un único Worker, sin web, Mini App ni Redis. Ver [Seenode](seenode.md) y [menús de Telegram](telegram.md). El detalle del modo web que sigue se conserva como referencia para una fase posterior.
+
+
 **Implementado** significa código ejecutable con pruebas locales donde se indica. No significa validación operativa con credenciales reales. Los métodos Telegram se probaron con transporte simulado.
 
 | Fase solicitada | Implementación disponible | Pendiente o alcance parcial |

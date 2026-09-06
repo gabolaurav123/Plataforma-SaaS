@@ -12,6 +12,7 @@ htmlcov/
 *.db
 *.db-*
 node_modules/
+*.egg-info/
 dist/
 .wrangler/
 .vite/

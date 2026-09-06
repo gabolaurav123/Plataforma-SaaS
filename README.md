@@ -1,115 +1,49 @@
-# Creator Engine · Telegram
+# Creator Engine · Todo desde Telegram
 
-**Seenode + Neon:** [guía con servicios, build, inicio, puertos, variables y BotFather](docs/seenode.md).
+La versión actual funciona con **un único Worker de Seenode + PostgreSQL en Neon**. Creadores, clientes y administrador operan mediante botones y mensajes de Telegram. No necesita web, Mini App, Redis, dominio ni puerto público.
 
-Plataforma nueva e independiente para creadores: Master Bot, Master Mini App, Managed Bots oficiales y Customer Mini App sobre un backend central. **El bot actual de producción no se leyó, modificó, conectó ni migró.**
+**[Configuración exacta de Seenode](docs/seenode.md)** · **[Uso de los menús](docs/telegram.md)**
 
-Esta entrega contiene una implementación ejecutable, migraciones y pruebas. Es una primera versión extensa; **todavía no es una plataforma certificada para producción ni incluye todas las funciones de la visión final**. Consulta el [estado por fase](docs/estado.md) y el [informe de pruebas](docs/pruebas.md).
+Es un proyecto independiente. El servicio y repositorio `telegram-saas-bot` quedan fuera de este despliegue.
 
-La vista privada de Sites permite revisar el panel con datos ficticios fuera de Telegram. Para operar con usuarios reales hacen falta un Master Bot nuevo, HTTPS, PostgreSQL, Redis y la configuración descrita abajo. La publicación privada de la interfaz no despliega el backend ni activa bots reales.
+## Qué puedes hacer desde Telegram
 
-[Abrir vista privada del panel](https://creator-engine-telegram.gabolaurav2.chatgpt.site) · [Ver el ejemplo del cliente](https://creator-engine-telegram.gabolaurav2.chatgpt.site/b/demo)
+- Crear negocios y bots mediante el mecanismo oficial de Managed Bots, sin pedir tokens a los creadores.
+- Configurar nombre, foto, descripciones, bienvenida, soporte, textos y políticas; conectar canales y publicar después de las comprobaciones.
+- Crear planes, cambiar precios en Stars, elegir duración y renovación; consultar pagos, clientes y membresías.
+- Recibir soporte, responder conversaciones, añadir notas y gestionar roles del equipo.
+- Preparar campañas con confirmación de envío y recordatorios de vencimiento; consultar estadísticas y registros.
+- Como administrador de plataforma, ver todos los negocios, usuarios, bots, cobros SaaS, trabajos y auditoría; configurar precios SaaS, suspender negocios y conceder días de acceso sin cobro.
+- Como cliente, comprar en Stars, consultar acceso y vencimiento, gestionar renovación, ver políticas y contactar soporte.
 
-## Qué incluye
+La cola, los asistentes y los identificadores de updates se guardan en PostgreSQL. Los tokens de bots y comprobantes se cifran. Cada botón está vinculado al usuario y al bot; los permisos se vuelven a comprobar al usarlo.
 
-- Autenticación validada con `initData`, espacios de trabajo, varios bots por creador, roles y sesiones de duración limitada.
-- Creación oficial de Managed Bots, cifrado de tokens, provisioning, webhook por identidad, personalización, salud y reparación.
-- Wizard del creador, administración del propietario y Mini App del cliente con catálogo, Stars, membresías y soporte.
-- Planes, pagos únicos o recurrentes, eventos de pago, reembolsos Stars, comprobantes con revisión manual y acceso al canal.
-- CRM, inbox, notas, campañas segmentadas, automatizaciones, cupones, atribución y registro de referidos.
-- Suscripción SaaS del creador separada de sus ventas, prueba gratuita, límites y funciones por plan.
-- Migraciones, RLS, cola persistente, workers, rate limits, Docker Compose, scripts de operación y documentación.
+## Arranque
 
-## Estructura
+Python 3.13. En Seenode selecciona Worker, repositorio `gabolaurav123/Plataforma-SaaS`, rama `main`, directorio `.` y una sola réplica Basic.
 
-```text
-backend/platform_app/  API, modelos, servicios, seguridad, workers
-apps/web/              Master Mini App + Customer Mini App, React/TypeScript/Sites
-migrations/            Alembic: esquema inicial y aislamiento PostgreSQL
-tests/                 Pruebas de dominio, API, seguridad, enrutamiento y transporte
-qa/                    Pruebas PostgreSQL embebido y restauración de snapshot
-scripts/               Inicialización, permisos, Master Bot y backups
-infra/                 Caddy, tareas systemd y rol PostgreSQL
-docs/                  Arquitectura, contratos, operación, estado y pruebas
+Build:
+
+```sh
+pip install -r requirements.lock && pip install --no-deps -e .
 ```
 
-## Ejecutar localmente
+Inicio:
 
-Requisitos: Python 3.13 o 3.14, Node 24 y npm. SQLite permite trabajar localmente; la configuración de producción exige PostgreSQL y Redis.
-
-En una terminal abierta **en esta carpeta nueva**:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.lock
-python -m pip install -e . --no-deps
-python scripts/bootstrap.py
-alembic upgrade head
-python scripts/seed.py
-uvicorn platform_app.main:app --host 127.0.0.1 --port 8000 --no-access-log
+```sh
+alembic upgrade head && python scripts/grant_api.py && python scripts/seed.py && python -m platform_app.polling
 ```
 
-`bootstrap.py` crea claves aleatorias en el `.env` local ignorado y conserva cualquier `.env` existente. Deja vacío el token de Telegram. Nunca busca configuración de otros proyectos.
+Copia las variables de [worker.env.example](deploy/seenode/worker.env.example) en Seenode y completa los valores privados allí. No subas secretos a GitHub. La guía explica cada variable y la configuración de BotFather.
 
-En otra terminal, desde esta misma carpeta:
+## Coste y límites iniciales
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m platform_app.worker
-```
+Una instancia Basic parte de US$3/mes. Neon utiliza su plan existente; el total depende de sus cuotas y del consumo. El lector de Telegram no consulta la base cuando no recibe mensajes. El mantenimiento se ejecuta cada 15 minutos por defecto; la retirada de acceso vencido puede retrasarse hasta ese intervalo. Una solicitud nueva siempre comprueba la fecha real de vencimiento.
 
-Para la interfaz:
+Esta configuración requiere una sola réplica y tiene un límite inicial configurable de 20 bots hijos, sin prometer capacidad para tráfico alto. Para actualizar, detener la instancia anterior antes de iniciar la siguiente y evitar dos lectores del mismo token. Las pruebas de Telegram usan un proveedor simulado; completar la prueba real con el nuevo Master antes de aceptar pagos de clientes.
 
-```powershell
-cd apps/web
-npm ci
-Copy-Item -LiteralPath .dev.vars.example -Destination .dev.vars
-npm run dev -- --host 127.0.0.1 --port 3000
-```
+## Código y pruebas
 
-Abre [el panel local](http://localhost:3000) y [el ejemplo del cliente](http://localhost:3000/b/demo). Fuera de Telegram se muestran ejemplos identificados como ficticios y no se guardan operaciones. La [API local](http://localhost:8000/docs) publica los contratos; no permite saltarse la autenticación de Telegram.
+`backend/platform_app/polling.py` ejecuta el proceso único. `services/console.py` contiene los menús de creadores y propietario; `services/console_customer.py`, los de clientes. `migrations/` conserva la evolución del esquema. Ejecutar `pytest` y `ruff check backend tests` después de instalar `requirements.lock`.
 
-## Pasos manuales para activar el sistema nuevo
-
-1. Crear **otro** Master Bot en BotFather. Habilitar Bot Management Mode en la Mini App de BotFather y configurar su Main Mini App. [Instrucciones detalladas](docs/telegram.md).
-2. Elegir el dominio HTTPS del backend y el dominio de las Mini Apps, y desplegar PostgreSQL/Redis/API/workers. [Despliegue](docs/operacion.md).
-3. Guardar el token nuevo, tu ID de propietario, URLs y claves en el entorno privado del servidor. [Variables](docs/variables.md). No poner tokens en Sites, URLs ni archivos compartidos.
-4. Ejecutar `python scripts/configure_master.py`. Verificar que `can_manage_bots` sea verdadero.
-5. Entrar al Master Bot y configurar los precios de la plataforma desde **Platform Owner → Planes SaaS**. Los precios iniciales están vacíos deliberadamente.
-6. Crear un bot de prueba desde el wizard, pulsar Start en ese bot, conectar un canal de prueba, completar políticas y planes, y usar Publicar para ejecutar el chequeo de preparación.
-7. Completar la [prueba real de aceptación](docs/pruebas.md), configurar copias cifradas y alertas, y revisar los pendientes antes de ofrecer el servicio.
-
-Después de esta instalación inicial, la creación y configuración de cada bot se realizan desde el wizard. La revisión humana de comprobantes bancarios permanece como parte intencional de ese método.
-
-## Cobros
-
-Las membresías digitales compradas dentro de Telegram usan **Telegram Stars**. La transferencia implementada registra pedidos originados fuera de Telegram; no se ofrece como alternativa al checkout digital interno. No hay procesador de tarjetas conectado. [Decisiones y fuentes oficiales](docs/telegram.md).
-
-## Verificación
-
-```powershell
-pytest --cov=platform_app
-ruff check backend tests
-alembic check
-npm ci --prefix qa
-npm run test:rls --prefix qa
-cd apps/web
-npm run check
-npm run build
-npm audit --audit-level=high
-```
-
-El CI incluido repite estas verificaciones. `npm run lint` analiza las pantallas, rutas y librerías propias; los componentes vendorizados de shadcn conservan su implementación del scaffold.
-
-## Documentación
-
-- [Arquitectura A–K y diagramas](docs/arquitectura.md)
-- [Investigación actual y BotFather](docs/telegram.md)
-- [Variables](docs/variables.md) · [API y permisos](docs/endpoints.md)
-- [Operación, despliegue, backups y recuperación](docs/operacion.md)
-- [Controles de seguridad](docs/seguridad.md)
-- [Estado y pendientes por fase](docs/estado.md)
-- [Pruebas y límites de la validación](docs/pruebas.md)
-
-No hay conexión con el bot anterior. `LegacyImporter` define únicamente un contrato futuro para una importación separada y autorizada.
+La interfaz web existente se conserva para una fase posterior en `apps/web/`. No se construye ni se despliega para este modo. La [arquitectura web opcional](docs/web-opcional.md), sus plantillas y Docker Compose corresponden a ese modo futuro, no al despliegue económico actual.

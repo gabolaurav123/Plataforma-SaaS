@@ -11,4 +11,5 @@ with Runtime().db.system() as db:
     db.execute(text("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO platform_api"))
     db.execute(text("REVOKE UPDATE, DELETE ON audit_logs FROM platform_api"))
     db.execute(text("REVOKE ALL ON auth_sessions FROM platform_api"))
+    db.execute(text("REVOKE ALL ON console_states, console_buttons, poll_cursors FROM platform_api"))
 print("Granted scoped API access; audit logs are append-only for API role.")

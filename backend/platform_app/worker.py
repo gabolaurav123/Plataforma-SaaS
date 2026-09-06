@@ -119,6 +119,24 @@ class Worker:
                 return
         self.r.limiter.outbound(job.bot_id or "master", job.tenant_id or "platform", job.payload["chat_id"])
         client = self.r.clients.child(session, bot) if bot else self.r.clients.master()
+        if job.payload.get("receipt_id"):
+            from .services.console import Console
+            from .models import BankReceipt
+
+            receipt = session.get(BankReceipt, job.payload["receipt_id"])
+            viewer = job.payload["viewer_id"]
+            if viewer != job.payload["chat_id"] or bot:
+                raise DomainError("INVALID_RECEIPT_VIEWER", "Acceso no permitido.", 403)
+            ui = Console(self.r, session, None, {"update_id": 0}, {"id": viewer})
+            ui.ctx(receipt.tenant_id, "payments")
+            result = client.call(
+                "sendPhoto",
+                chat_id=viewer,
+                caption=job.payload["caption"],
+                files={"photo": ("comprobante.jpg", self.r.receipts.read(receipt), "image/jpeg")},
+            )
+            audit(session, receipt.tenant_id, ui.user.id, "TELEGRAM_RECEIPT_VIEWED", receipt.id)
+            return
         params = {k: v for k, v in job.payload.items() if k in {"chat_id", "text", "reply_markup"}}
         result = client.call("sendMessage", **params)
         self.mark_delivery(session, job, "SENT", result.get("message_id"))
@@ -127,7 +145,8 @@ class Worker:
     def tick(self, session):
         self.r.payments.expire_due(session)
         suspend_due(session)
-        enqueue(session, "HEALTH_SCAN", None, {"bucket": now() // 900}, f"health-scan:{now() // 900}")
+        if self.r.settings.deployment_mode != "telegram":
+            enqueue(session, "HEALTH_SCAN", None, {"bucket": now() // 900}, f"health-scan:{now() // 900}")
         for sub in session.scalars(
             select(Subscription)
             .where(

@@ -1,168 +1,97 @@
-# Configurar Creator Engine en Seenode con Neon
+# Seenode: un Worker y tu Neon existente
 
-Repositorio: https://github.com/gabolaurav123/Plataforma-SaaS · rama `main`.
-Usar el commit más reciente que incluya `build:seenode` y la migración `0003`.
-Crear servicios nuevos; no editar `telegram-saas-bot` ni conectar su token o su base de datos.
+Esta configuración reemplaza la propuesta anterior de cuatro servicios. Repositorio: [gabolaurav123/Plataforma-SaaS](https://github.com/gabolaurav123/Plataforma-SaaS), rama `main`. Usar la versión con `platform_app.polling` y migración `0004`.
 
-## Servicios
+## Formulario de Seenode
 
-En Seenode: **Crear nuevo → tipo de servicio → Git repository → Conectar Plataforma-SaaS**.
+Crear nuevo → **Worker** → Git repository → **Plataforma-SaaS** → Conectar.
 
-| Nombre sugerido | Tipo | Imagen | Directorio raíz | Puerto | Réplicas |
-|---|---|---|---|---|---|
-| plataforma-saas-api | Web | Python 3.13 | `.` | `8000` | 1 |
-| plataforma-saas-worker | Worker | Python 3.13 | `.` | Sin puerto | 1 |
-| plataforma-saas-web | Web | Node 24 | `apps/web` | `3000` | 1 |
-| plataforma-saas-redis | Servicio privado | Docker `redis:8.2.9-alpine` | No aplica | `6379` | 1 |
+| Campo | Valor |
+|---|---|
+| Nombre sugerido | `plataforma-saas-telegram` |
+| Tipo | Worker |
+| Repositorio | `gabolaurav123/Plataforma-SaaS` |
+| Rama | `main` |
+| Imagen | Python 3.13 |
+| Directorio raíz | `.` |
+| Plan | Basic, 512 MB, 0.25 vCPU |
+| Réplicas | **1** |
+| Puerto / dominio | **No aplica** |
 
-Neon conserva la base PostgreSQL. Redis se utiliza para límites compartidos y caché; la cola persistente está en PostgreSQL.
-No hace falta crear PostgreSQL en Seenode. Con `RECEIPT_STORAGE=database`, los comprobantes se guardan cifrados en Neon y no requieren discos de Seenode.
-
-Un inicio con cuatro instancias Basic cuesta **US$12/mes** en Seenode, con cobro proporcional diario. Neon se factura según su propio plan. Cada Basic tiene 512 MB y 0.25 vCPU; es una configuración inicial, cuya capacidad debe medirse con tráfico real. El Worker consulta PostgreSQL continuamente y mantiene el cómputo de Neon activo.
-Fuentes: [precios](https://seenode.com/docs/reference/pricing), [imágenes Docker](https://seenode.com/docs/how-to/deploy-from-a-docker-image), [tipos de servicio](https://seenode.com/docs/concepts/services-overview).
-
-## Comandos exactos
-
-API y Worker, **Comando de build**:
+Build:
 
 ```sh
 pip install -r requirements.lock && pip install --no-deps -e .
 ```
 
-API, **Comando de inicio**:
+Inicio:
 
 ```sh
-alembic upgrade head && python scripts/grant_api.py && python scripts/seed.py && python scripts/configure_master.py && uvicorn platform_app.main:app --host 0.0.0.0 --port 8000 --no-access-log
+alembic upgrade head && python scripts/grant_api.py && python scripts/seed.py && python -m platform_app.polling
 ```
 
-Este inicio migra únicamente la base configurada, aplica permisos al rol limitado, inicializa los planes editables y configura webhook, comandos y botón del nuevo Master. Las credenciales y ambas URLs HTTPS deben estar completas antes del arranque. Una sola réplica de API ejecuta las migraciones; para escalar, mover migraciones a una fase de despliegue única.
+El inicio migra únicamente la base indicada, aplica los permisos del rol limitado, conserva o crea los planes SaaS y configura el nuevo Master con comandos. Comprueba el @usuario del token antes de cambiar su configuración. Usa long polling (`getUpdates`): no registra webhooks ni expone un servidor HTTP. Los bots hijos se atienden dentro del mismo proceso.
 
-Worker, **Comando de inicio**:
+No crear API Web, frontend, Redis ni otra base en Seenode. No editar el servicio `telegram-saas-bot` existente. El coste nuevo parte de **US$3/mes en Seenode**, además del consumo de tu plan Neon y de los servicios que ya tenías. [Precios Seenode](https://seenode.com/docs/reference/pricing), [Workers](https://seenode.com/docs/how-to/deploy-a-worker).
 
-```sh
-python -m platform_app.worker
-```
+## Variables de entorno
 
-Mini App, **Comando de build**:
+Pegar [worker.env.example](../deploy/seenode/worker.env.example) en el formulario. Seenode acepta `NOMBRE*=valor` para marcar una variable secreta. En un archivo `.env` local se usa `NOMBRE=valor`, sin asterisco.
 
-```sh
-npm ci --include=dev && npm run build:seenode
-```
-
-Mini App, **Comando de inicio**:
-
-```sh
-npm run start:seenode
-```
-
-La Mini App tiene un servidor Node de producción independiente. `npm start` corresponde al desarrollo con Wrangler del otro destino de hosting. Seenode requiere que el puerto del formulario coincida con el del proceso y que escuche en `0.0.0.0`; no inyecta automáticamente una variable `PORT`. [Puertos](https://seenode.com/docs/how-to/configure/port), [monorepo](https://seenode.com/docs/how-to/configure/monorepo).
-
-## Neon: dos roles en la base nueva
-
-Identificar primero el proyecto, la rama y la base destinados a esta plataforma. No ejecutar estas instrucciones en la base del bot existente.
-
-- `SYSTEM_DATABASE_URL`: conexión del propietario de la base nueva, normalmente `neondb_owner`. Se usa para operaciones internas entre tenants.
-- `MIGRATION_DATABASE_URL`: la conexión **directa, sin pooler**, del propietario, en la API.
-- `DATABASE_URL`: misma base y rama, usuario limitado **`platform_api`**. Su contraseña será distinta.
-
-Neon concede privilegios elevados a los roles creados desde su consola. Crear `platform_api` mediante SQL para que no pertenezca a `neon_superuser`. [Roles y compatibilidad de Neon](https://neon.com/docs/reference/compatibility).
-
-En el editor SQL de la base nueva, como propietario, ejecutar una sola vez tras sustituir la contraseña:
-
-```sql
-CREATE ROLE platform_api LOGIN PASSWORD 'SUSTITUIR_POR_UNA_CLAVE_ALEATORIA_LARGA'
-  NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
-GRANT USAGE ON SCHEMA public TO platform_api;
-```
-
-Si el rol ya existe, verificar sus permisos y usar su contraseña; no restablecerla a ciegas. `scripts/grant_api.py` concede los permisos de tablas después de las migraciones. La API comprueba que este rol no pueda saltarse RLS ni modificar las tablas como propietario.
-
-Formato de conexión Python:
-
-```text
-postgresql+psycopg://platform_api:CLAVE@HOST_NEON/BASE?sslmode=require&channel_binding=require
-postgresql+psycopg://neondb_owner:CLAVE@HOST_NEON/BASE?sslmode=require&channel_binding=require
-```
-
-Copiar los valores reales desde Neon. Cambiar el prefijo `postgresql://` a `postgresql+psycopg://`; conservar el resto. Codificar caracteres especiales de la contraseña para una URL. No pegar el comando `psql` ni las comillas exteriores.
-
-## Variables de API y Worker
-
-La plantilla [api.env.example](../deploy/seenode/api.env.example) se pega en el cuadro **Variables de entorno** de Seenode. Sustituir todos los marcadores. El sufijo `*` marca una clave como secreta en Seenode y no forma parte del nombre que recibe Python.
-
-El Worker usa las mismas variables, con las mismas claves de cifrado y webhook, excepto `MIGRATION_DATABASE_URL`, que se necesita solo en la API.
-
-| Variable | Valor/origen |
+| Variable | Valor o finalidad |
 |---|---|
 | `ENVIRONMENT` | `production` |
-| `DATABASE_URL` | Neon, rol `platform_api` |
-| `SYSTEM_DATABASE_URL` | Neon, propietario de la base nueva |
-| `MIGRATION_DATABASE_URL` | Neon directo, propietario; solo API |
-| `REDIS_URL` | `redis://:CLAVE@HOST_PRIVADO_REAL:6379/0` |
-| `MASTER_BOT_TOKEN` | Token del nuevo Master en BotFather |
-| `MASTER_BOT_USERNAME` | Usuario del nuevo Master sin `@`; se compara con el token antes de cambiar su webhook |
-| `MASTER_WEBHOOK_SECRET` | Secreto aleatorio nuevo, al menos 32 caracteres |
-| `PLATFORM_OWNER_IDS` | ID numérico de tu usuario de Telegram; varios separados por coma |
-| `ENCRYPTION_KEYS` | JSON como `{"v1":"BASE64_DE_32_BYTES_ALEATORIOS"}` |
-| `ACTIVE_KEY_VERSION` | `v1` |
-| `PUBLIC_API_URL` | URL HTTPS pública real de `plataforma-saas-api`, sin `/` final |
-| `MINI_APP_URL` | URL HTTPS pública real de `plataforma-saas-web`, sin `/` final |
-| `ALLOWED_ORIGINS` | Misma URL de Mini App; orígenes adicionales separados por coma |
-| `RECEIPT_STORAGE` | `database` |
-| `STORAGE_PATH` | `./storage`; no se usa para comprobantes nuevos en modo database |
+| `DEPLOYMENT_MODE` | `telegram` |
+| `DATABASE_URL` | Conexión Neon agrupada del rol limitado `platform_api` |
+| `SYSTEM_DATABASE_URL` | Conexión Neon agrupada de `neondb_owner`, solo en este Worker |
+| `MIGRATION_DATABASE_URL` | Conexión Neon directa de `neondb_owner` para Alembic |
+| `MASTER_BOT_TOKEN` | Token del **nuevo** bot maestro, secreto |
+| `MASTER_BOT_USERNAME` | Usuario del nuevo Master, sin `@`; debe corresponder al token |
+| `PLATFORM_OWNER_IDS` | Tu ID numérico de Telegram; varios IDs separados por comas |
+| `ENCRYPTION_KEYS` | JSON con clave aleatoria AES de 32 bytes codificada en Base64, secreto |
+| `ACTIVE_KEY_VERSION` | `v1`; debe existir en el JSON anterior |
+| `RECEIPT_STORAGE` | `database`, imágenes cifradas en Neon |
+| `STORAGE_PATH` | `./storage`, usado para el bloqueo local del proceso |
+| `MAX_UPLOAD_BYTES` | `5242880` (5 MB) |
+| `POLLING_TIMEOUT` | `25`, duración de cada consulta larga a Telegram |
+| `MAINTENANCE_INTERVAL` | `900`, mantenimiento cada 15 minutos |
+| `POLLING_MAX_BOTS` | `20`, límite inicial de bots hijos para esta instancia pequeña |
+| `TRIAL_DAYS` | `7`, prueba inicial del creador |
+| `WORKER_LEASE_SECONDS` | `180`, recuperación de trabajos interrumpidos |
+| `BOT_RPS` / `TENANT_RPS` | `20` / `30`, límites de envío por bot y negocio |
+| `GLOBAL_RPS` / `USER_RPS` | `300` / `1`, límites global y por destinatario |
 | `DEMO_ENABLED` | `false` |
-| `TELEGRAM_TEST_ENVIRONMENT` | `false` para el bot real nuevo |
-| `SESSION_TTL_SECONDS` | `1800` |
-| `INIT_DATA_MAX_AGE_SECONDS` | `300` |
-| `TRIAL_DAYS` | `7` |
-| `MAX_UPLOAD_BYTES` | `5242880` |
-| `WORKER_LEASE_SECONDS` | `180` |
-| `JOBS_PER_TENANT_ROUND` | `5` (opción reservada; no modifica aún la planificación) |
-| `BOT_RPS` / `TENANT_RPS` / `GLOBAL_RPS` / `USER_RPS` | `20` / `30` / `300` / `1` |
+| `TELEGRAM_TEST_ENVIRONMENT` | `false` |
 
-`POSTGRES_PASSWORD` y `PLATFORM_API_PASSWORD` pertenecen al arranque local con Compose y no se necesitan en Seenode con Neon.
+No hacen falta `REDIS_URL`, `PORT`, `PUBLIC_API_URL`, `MINI_APP_URL`, `ALLOWED_ORIGINS` ni `MASTER_WEBHOOK_SECRET` en este modo. Las librerías del modo web pueden seguir instaladas; no crean servicios ni cargos por sí solas.
 
-Generar cada secreto hexadecimal con `python -c "import secrets; print(secrets.token_hex(32))"`.
-Generar el JSON de cifrado con `python -c "import os,base64,json; print(json.dumps({'v1':base64.b64encode(os.urandom(32)).decode()}))"`.
-Guardar las claves de cifrado en tu gestor de secretos y conservarlas entre despliegues: se necesitan también para recuperar copias de seguridad. No subir secretos a GitHub ni ponerlos en la Mini App.
+## Neon y secretos
 
-## Variables de la Mini App
+Las tres conexiones apuntan a **la misma base nueva**, no son tres bases ni tres servicios. La conexión agrupada contiene `-pooler` en el host; la directa no. Usar `postgresql+psycopg://.../neondb?sslmode=require&channel_binding=require` y codificar caracteres especiales de las contraseñas en la URL.
 
-```dotenv
-NODE_ENV=production
-HOST=0.0.0.0
-PORT=3000
-PLATFORM_API_URL=https://URL_REAL_DE_LA_API
-```
+En el proyecto Neon nuevo ya preparado se usan `neondb_owner` y `platform_api`. Este último no debe ser propietario de tablas ni tener `BYPASSRLS`. El arranque verifica las políticas de aislamiento y que las tablas privadas de botones, diálogos y cursores no sean accesibles con ese rol. No reutilizar credenciales del bot anterior.
 
-Solo necesita la URL del backend; la conexión se realiza desde el servidor Node. No recibe credenciales de Telegram, PostgreSQL ni Redis.
+Conserva una copia segura de `ENCRYPTION_KEYS`: perder esta clave impide recuperar los tokens cifrados. No la regeneres en cada despliegue. La base y la clave deben incluirse en tu estrategia de respaldo.
 
-## Redis privado
+## BotFather y primer uso
 
-En **Crear nuevo → Servicio privado → Docker image**, imagen oficial `redis`, tag `8.2.9-alpine`, credenciales de pull `Ninguna (pública)`.
-Puerto `6379`. Variable secreta `REDIS_PASSWORD*=TU_SECRETO_HEXADECIMAL`.
-Comando Docker:
+1. Abre el **nuevo** Master en @BotFather y activa **Bot Management Mode** en sus ajustes. Telegram puede mostrar esta configuración en la interfaz propia de BotFather.
+2. Completa token, usuario e ID administrador en Seenode. El ID es numérico, no tu @usuario. No hace falta enviarlo mediante una página web de la plataforma.
+3. Inicia el Worker. El arranque configura `/start`, `/admin`, `/id`, `/cancel`, `/support` y `/paysupport`, y deja el menú de comandos de Telegram.
+4. Abre el Master desde tu cuenta y pulsa Iniciar. Tu cuenta verá **Administrar plataforma**; las demás no.
+5. Crea un negocio y su bot. Usa el botón oficial «Crear mi bot»; no pegues tokens de bots hijos.
+6. En el Master, abre el bot hijo y configura soporte, términos, privacidad y reembolso; añade el canal y crea un plan en Stars.
+7. Abre también el bot hijo y pulsa Iniciar para permitirle enviarte la prueba. Vuelve al Master y pulsa **Comprobar y publicar**.
+8. Desde otra cuenta, prueba catálogo, políticas, una compra de importe elegido por ti, acceso al canal y soporte. No dar por verificado un pago real hasta terminar esta prueba.
 
-```sh
-sh -c 'exec redis-server --bind 0.0.0.0 --port 6379 --requirepass "${REDIS_PASSWORD:?Define REDIS_PASSWORD}" --maxmemory 128mb --maxmemory-policy noeviction --save "" --appendonly no'
-```
+El administrador configura precios SaaS en `/admin → Precios SaaS`. Los precios iniciales están vacíos: el sistema no inventa tarifas. Puede conceder días gratis desde `/admin → Negocios → negocio → Conceder días / reactivar`, sin registrar cobros ficticios.
 
-Usar en `REDIS_URL` el hostname privado que Seenode muestre al crear el servicio. Verificar conectividad desde la API con `/health/ready`; no inventar el hostname. No se requiere disco persistente para esta caché. Los [volúmenes de Seenode](https://seenode.com/docs/how-to/persistent-storage) no se comparten entre servicios; por eso aquí los comprobantes usan Neon.
+## Mantenimiento y consumo
 
-## Orden y Telegram
+El proceso espera mensajes en Telegram sin consultar Neon por cada espera vacía. La cola despierta al recibir un update o al llegar el próximo trabajo pendiente. El mantenimiento agrupa vencimientos y limpieza cada 15 minutos; retirar miembros vencidos puede demorarse ese tiempo. El acceso nuevo siempre verifica el vencimiento exacto.
 
-1. Confirmar la base nueva de Neon y crear el rol limitado.
-2. Crear Redis y la Mini App; obtener su hostname privado y la URL HTTPS de la Mini App. Se puede añadir `PLATFORM_API_URL` a la Mini App cuando Seenode asigne la URL de API.
-3. Crear la API y completar ambas URLs y todas las credenciales. Si Seenode asigna la URL solo después de crear, mantenerla detenida mientras se completan esas variables y luego desplegarla.
-4. Verificar `/health/live` y `/health/ready` en la API. Esta última debe devolver HTTP 200 y `status: ready`.
-5. Crear el Worker cuando las migraciones de API hayan terminado. Completar `PLATFORM_API_URL` en la Mini App y desplegarla si aún faltaba.
-6. En la Mini App oficial de **@BotFather**, elegir únicamente el nuevo Master, activar **Bot Management Mode** y configurar su **Main Mini App** con la URL HTTPS de `plataforma-saas-web`. Esto no se activa mediante `setWebhook`. [Guía oficial](https://core.telegram.org/bots/features#creating-your-own-management-bot).
-7. Abrir el nuevo Master y pulsar `/start`. Debe mostrar **Crear mi bot**, **Ya tengo cuenta** y **Cómo funciona**. El botón permanente es **Mi negocio**. Los usuarios con espacio existente ven su panel y selección de espacio. El Worker debe estar activo para enviar estas respuestas.
-8. Tu ID numérico identifica al administrador en `PLATFORM_OWNER_IDS`. Si ya abriste el bot, `python scripts/list_users.py` muestra los usuarios registrados al ejecutarlo con la configuración de esta base nueva.
-9. En Owner, definir los precios de los planes SaaS; se entregan sin precios de cobro preestablecidos. Completar el alta de un creador y su bot en un canal de prueba antes de abrir ventas.
+Neon puede suspender el cómputo tras cinco minutos de inactividad; el plan gratuito tiene cuotas propias, por lo que no se promete coste cero bajo actividad continua. Reducir `MAINTENANCE_INTERVAL` acelera las tareas periódicas y puede aumentar consumo. [Scale to zero](https://neon.com/docs/introduction/scale-to-zero), [plan Neon](https://neon.com/pricing).
 
-La configuración automática registra `/start` y `/paysupport`, menú Mini App y webhook `/telegram/webhook/master` con encabezado secreto. Los botones de bots hijos se configuran al provisionarlos. Los cobros digitales dentro de Telegram usan Stars. [Documentación de pagos](https://core.telegram.org/bots/payments-stars).
+Mantener **una sola réplica**, sin otro Worker ni sesión local usando el mismo token. Para actualizar, detener la instancia anterior antes de iniciar la siguiente. El bloqueo local impide dos procesos en un contenedor; un conflicto de Telegram detiene el proceso y queda en logs. Los cursores y trabajos persistentes permiten reanudar al reiniciar. Telegram conserva updates pendientes un máximo de 24 horas; evitar interrupciones prolongadas. [getUpdates](https://core.telegram.org/bots/api#getupdates).
 
-## Verificación de esta adaptación
-
-Pruebas locales: 64 tests Python, migraciones hasta `0003` sin diferencias pendientes, 11 comprobaciones PostgreSQL/RLS en PGlite, compilación Node de producción, TypeScript/lint y peticiones HTTP reales al servidor Node para página principal, cliente y proxy GET/POST. Telegram y el upstream se simularon en estas pruebas; un despliegue real y la prueba de `/start` requieren las credenciales del nuevo bot y de Neon.
+La seguridad depende del token, los IDs autorizados, los roles y las claves. Usar Telegram evita publicar endpoints propios en esta fase; no convierte las conversaciones con bots en chats cifrados de extremo a extremo.

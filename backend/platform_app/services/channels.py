@@ -96,6 +96,7 @@ class ChannelService:
                 creates_join_request=True,
             )
             previous = ChannelInvite(
+                id=uid(),
                 tenant_id=bot.tenant_id,
                 channel_id=channel.id,
                 contact_id=contact.id,
@@ -109,7 +110,7 @@ class ChannelService:
             bot,
             contact.telegram_user_id,
             "✅ Tu membresía está activa. Solicita acceso con tu enlace personal:",
-            f"access-message:{subscription.id}:{subscription.expires_at}",
+            f"access-message:{subscription.id}:{previous.id}",
             reply_markup={"inline_keyboard": [[{"text": "Entrar al canal", "url": previous.invite_link}]]},
         )
 

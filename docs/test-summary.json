@@ -1,31 +1,23 @@
 {
   "date": "2026-09-06",
-  "pytest_passed": 61,
-  "pytest_seconds": 54.72,
+  "deployment_mode": "telegram",
+  "pytest_passed": 85,
+  "pytest_seconds": 110.93,
   "coverage_statements": {
-    "covered_lines": 2330,
-    "num_statements": 2911,
-    "percent_covered": 80.04122294744074,
-    "percent_covered_display": "80",
-    "missing_lines": 581,
+    "covered_lines": 3059,
+    "num_statements": 3926,
+    "percent_covered": 77.91645440652063,
+    "percent_covered_display": "78",
+    "missing_lines": 867,
     "excluded_lines": 18,
-    "percent_statements_covered": 80.04122294744074,
-    "percent_statements_covered_display": "80"
+    "percent_statements_covered": 77.91645440652063,
+    "percent_statements_covered_display": "78"
   },
-  "postgres_embedded_checks": 11,
+  "postgres_embedded_checks": 12,
   "postgres_embedded_version": "17.5",
-  "routing_bot_counts": [
-    100,
-    1000,
-    10000
-  ],
-  "typescript": "PASS",
-  "frontend_lint": "PASS (authored app/components/platform/lib)",
-  "backend_lint": "PASS",
-  "frontend_build": "PASS",
-  "npm_audit_vulnerabilities": 0,
-  "real_telegram_tested": false,
-  "docker_tested": false,
-  "distributed_load_tested": false,
-  "browser_tested": false
+  "migration": "0004",
+  "native_telegram_tests": 21,
+  "telegram_provider": "simulated",
+  "neon_actual_database_boundary": "verified after migration 0004",
+  "real_telegram_acceptance": "pending deployment and live user test"
 }

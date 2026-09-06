@@ -1,6 +1,6 @@
 import secrets
 from urllib.parse import quote, urlencode
-from sqlalchemy import select
+from sqlalchemy import select, func
 from ..models import (
     ManagedBot,
     BotSecret,
@@ -11,11 +11,13 @@ from ..models import (
     Plan,
     PlanPrice,
     ProviderConfig,
+    TenantMember,
+    SaaSPlan,
     now,
     uid,
 )
 from ..errors import DomainError
-from ..security import digest, random_secret, inspect_image
+from ..security import digest, random_secret, inspect_image, require_role
 from .common import audit, enqueue
 from .tenants import create_tenant, upsert_user, check_entity_limit, entitlement
 from .texts import DEFAULT_TEXTS
@@ -63,6 +65,21 @@ class TelegramBotManager:
                 "MASTER_BOT_MISMATCH", "El token no corresponde al Master Bot configurado.", 409
             )
         client = self.r.clients.master()
+        if self.r.settings.deployment_mode == "telegram":
+            client.call("deleteWebhook", drop_pending_updates=False)
+            client.call(
+                "setMyCommands",
+                commands=[
+                    {"command": "start", "description": "Mi negocio y mis bots"},
+                    {"command": "admin", "description": "Administración de la plataforma"},
+                    {"command": "id", "description": "Mi identificador de Telegram"},
+                    {"command": "cancel", "description": "Cancelar y volver al inicio"},
+                    {"command": "support", "description": "Ayuda y soporte"},
+                    {"command": "paysupport", "description": "Ayuda con pagos"},
+                ],
+            )
+            client.call("setChatMenuButton", menu_button={"type": "commands"})
+            return capability
         client.call(
             "setWebhook",
             url=f"{self.r.settings.public_api_url}/telegram/webhook/master",
@@ -92,6 +109,7 @@ class TelegramBotManager:
         if not capability["enabled"]:
             raise DomainError("MANAGEMENT_MODE_DISABLED", capability["message"], 409)
         check_entity_limit(session, tenant_id, "bots", ManagedBot)
+        self.check_polling_capacity(session)
         # One active correlation per creator. No tenant supplied by Telegram is trusted.
         active = list(
             session.scalars(
@@ -115,6 +133,17 @@ class TelegramBotManager:
         session.flush()
         username = capability["username"]
         link = f"https://t.me/newbot/{quote(username)}/{quote(suggested_username)}?{urlencode({'name': suggested_name})}"
+        button = {
+            "text": "Crear mi bot",
+            "request_managed_bot": {
+                "request_id": request.request_id,
+                "suggested_name": suggested_name,
+                "suggested_username": suggested_username,
+            },
+        }
+        if self.r.settings.deployment_mode == "telegram":
+            audit(session, tenant_id, user.id, "BOT_CREATION_REQUESTED", request.id)
+            return {"url": link, "keyboard": [[button]], "expires_at": request.expires_at}
         prepared = self.r.clients.master().call(
             "savePreparedKeyboardButton",
             user_id=user.telegram_user_id,
@@ -162,12 +191,22 @@ class TelegramBotManager:
             raise DomainError("AMBIGUOUS_CREATION", "Abre de nuevo el asistente de creación.", 409)
         if pending:
             tenant_id = pending[0].tenant_id
+            member = session.scalar(
+                select(TenantMember).where(
+                    TenantMember.tenant_id == tenant_id,
+                    TenantMember.user_id == user.id,
+                    TenantMember.active.is_(True),
+                )
+            )
+            if user.telegram_user_id not in self.r.settings.owner_ids:
+                require_role(member.role if member else "", "configure")
         else:
             # A valid Telegram-created bot may arrive from a shared official deep link.
             tenant_id = create_tenant(
                 session, user, f"Negocio de {user.first_name}"[:100], self.r.settings
             ).id
         check_entity_limit(session, tenant_id, "bots", ManagedBot)
+        self.check_polling_capacity(session)
         bot = ManagedBot(
             id=uid(),
             tenant_id=tenant_id,
@@ -184,6 +223,23 @@ class TelegramBotManager:
         enqueue(session, "PROVISION", tenant_id, {"bot_id": bot.id}, f"provision:{bot.id}", bot.id)
         audit(session, tenant_id, user.id, "BOT_CREATED", bot.id)
         return bot
+
+    def check_polling_capacity(self, session):
+        if self.r.settings.deployment_mode != "telegram":
+            return
+        # Serialize capacity checks in PostgreSQL without keeping a connection alive at idle.
+        session.scalar(select(SaaSPlan).where(SaaSPlan.name == "STARTER").with_for_update())
+        count = session.scalar(
+            select(func.count())
+            .select_from(ManagedBot)
+            .where(ManagedBot.status.not_in(["OWNERSHIP_CHANGED", "SUSPENDED"]))
+        )
+        if count >= self.r.settings.polling_max_bots:
+            raise DomainError(
+                "PLATFORM_CAPACITY",
+                "La plataforma alcanzó su capacidad inicial. Contacta al administrador.",
+                409,
+            )
 
     def refresh_secret(self, session, bot, rotate=False):
         if bot.status == "OWNERSHIP_CHANGED":
@@ -262,16 +318,29 @@ class ManagedBotProvisioner:
                 webhook_secret = self.r.vault.decrypt(
                     secret.webhook_ciphertext, f"{bot.tenant_id}:{bot.id}:webhook"
                 )
-                client.call(
-                    "setWebhook",
-                    url=f"{self.r.settings.public_api_url}/telegram/webhook/{bot.public_id}",
-                    secret_token=webhook_secret,
-                    allowed_updates=CHILD_UPDATES,
-                    drop_pending_updates=False,
-                )
+                if self.r.settings.deployment_mode == "telegram":
+                    client.call("deleteWebhook", drop_pending_updates=False)
+                else:
+                    client.call(
+                        "setWebhook",
+                        url=f"{self.r.settings.public_api_url}/telegram/webhook/{bot.public_id}",
+                        secret_token=webhook_secret,
+                        allowed_updates=CHILD_UPDATES,
+                        drop_pending_updates=False,
+                    )
                 session.flush()
                 self.apply_configuration(session, bot, settings)
                 bot.status, bot.last_error_code = "READY", None
+                if self.r.settings.deployment_mode == "telegram":
+                    from .common import send
+
+                    send(
+                        session,
+                        None,
+                        bot.owner_telegram_user_id,
+                        f"✅ @{bot.username} está conectado. Abre /start aquí para configurarlo y publicarlo.",
+                        f"native-provisioned:{bot.id}",
+                    )
                 audit(session, bot.tenant_id, "system", "BOT_PROVISIONED", bot.id)
         except DomainError as error:
             with self.r.db.system() as session:
@@ -285,6 +354,9 @@ class ManagedBotProvisioner:
         client.call("setMyDescription", description=settings.description)
         client.call("setMyShortDescription", short_description=settings.short_description)
         client.call("setMyCommands", commands=settings.commands)
+        if self.r.settings.deployment_mode == "telegram":
+            client.call("setChatMenuButton", menu_button={"type": "commands"})
+            return
         client.call(
             "setChatMenuButton",
             menu_button={
@@ -308,11 +380,15 @@ class ManagedBotProvisioner:
         me, webhook = client.call("getMe"), client.call("getWebhookInfo")
         expected = f"{self.r.settings.public_api_url}/telegram/webhook/{bot.public_id}"
         menu = client.call("getChatMenuButton")
-        good = (
-            me["id"] == bot.telegram_bot_id
-            and webhook.get("url") == expected
-            and menu.get("web_app", {}).get("url") == f"{self.r.settings.mini_app_url}/b/{bot.public_id}"
+        native = self.r.settings.deployment_mode == "telegram"
+        if native:
+            expected = ""
+        menu_ok = (
+            menu.get("type") == "commands"
+            if native
+            else (menu.get("web_app", {}).get("url") == f"{self.r.settings.mini_app_url}/b/{bot.public_id}")
         )
+        good = me["id"] == bot.telegram_bot_id and webhook.get("url") == expected and menu_ok
         if repair and not good:
             enqueue(
                 session, "PROVISION", bot.tenant_id, {"bot_id": bot.id}, f"repair:{bot.id}:{uid()}", bot.id
@@ -327,8 +403,8 @@ class ManagedBotProvisioner:
         health = {
             "identity_ok": me["id"] == bot.telegram_bot_id,
             "webhook_ok": webhook.get("url") == expected,
-            "menu_ok": menu.get("web_app", {}).get("url")
-            == f"{self.r.settings.mini_app_url}/b/{bot.public_id}",
+            "menu_ok": menu_ok,
+            "transport": "polling" if native else "webhook",
             "pending_updates": webhook.get("pending_update_count", 0),
             "last_webhook_error_at": webhook.get("last_error_date"),
             "channel_permissions_ok": all(c.status == "CONNECTED" for c in channels),

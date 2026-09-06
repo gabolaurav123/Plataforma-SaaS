@@ -24,6 +24,9 @@ class UpdateHandler:
         if message.get("successful_payment"):
             self.r.billing.confirm(session, message["from"]["id"], message["successful_payment"])
             return
+        if self.r.settings.deployment_mode == "telegram":
+            from .console import handle
+            return handle(self.r, session, update)
         if message.get("chat", {}).get("type") != "private" or not message.get("from"):
             return
         user = upsert_user(session, message["from"])
@@ -126,6 +129,9 @@ class UpdateHandler:
         if message.get("refunded_payment"):
             self.r.payments.refunded_event(session, bot, message["refunded_payment"])
             return
+        if self.r.settings.deployment_mode == "telegram":
+            from .console import handle
+            return handle(self.r, session, update, bot)
         if (
             message.get("chat", {}).get("type") != "private"
             or not message.get("from")

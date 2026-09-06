@@ -35,11 +35,29 @@ def ingest(public_id, header, update, r):
         if not valid:
             raise DomainError("INVALID_WEBHOOK", "Webhook no autorizado.", 403)
         bot_id, tenant_id = (bot.id, bot.tenant_id) if bot else (None, None)
+    return store_update(bot_id, tenant_id, update, r)
+
+
+def store_update(bot_id, tenant_id, update, r, *, polling=False):
+    """Trusted ingestion shared by authenticated webhooks and outbound Telegram polling."""
     if not isinstance(update, dict) or type(update.get("update_id")) is not int:
         raise DomainError("INVALID_UPDATE", "Update no válido.")
     bot_key = bot_id or "master"
     try:
         with r.db.system() as session:
+            bot = session.get(ManagedBot, bot_id) if bot_id else None
+            if bot_id and (not bot or bot.tenant_id != tenant_id):
+                raise DomainError("BOT_NOT_FOUND", "Bot no disponible.", 404)
+            if polling:
+                from ..models import PollCursor
+
+                cursor = session.scalar(
+                    select(PollCursor).where(PollCursor.bot_key == bot_key).with_for_update()
+                )
+                if not cursor:
+                    cursor = PollCursor(bot_key=bot_key, next_offset=0)
+                    session.add(cursor)
+                cursor.next_offset = update["update_id"] + 1
             existing = session.scalar(
                 select(TelegramUpdate.id).where(
                     TelegramUpdate.bot_key == bot_key, TelegramUpdate.update_id == update["update_id"]
