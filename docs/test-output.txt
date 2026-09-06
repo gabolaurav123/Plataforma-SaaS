@@ -1,0 +1,57 @@
+.............................................................            [100%]
+============================== warnings summary ===============================
+..\..\work\.venv\Lib\site-packages\fastapi\testclient.py:1
+  <workspace>\work\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+..\..\work\.venv\Lib\site-packages\starlette\testclient.py:53
+  <workspace>\work\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.14.3-final-0 _______________
+
+Name                                        Stmts   Miss  Cover   Missing
+-------------------------------------------------------------------------
+backend\platform_app\__init__.py                0      0   100%
+backend\platform_app\api\auth.py               66      6    91%   22, 25, 55, 63, 69, 103
+backend\platform_app\api\creator.py           331    119    64%   44-45, 50-51, 68-69, 76, 81, 88, 99-100, 114, 134-138, 144, 150-151, 163-166, 171-183, 188-191, 196-203, 208-209, 221-223, 228-231, 238-241, 249-251, 253, 256, 259, 261, 292, 299, 308-309, 311-320, 333-355, 360-365, 372-375, 384-393, 401-403, 408-416, 427-432, 440-441, 453, 456, 472, 480-482
+backend\platform_app\api\customer.py           75     21    72%   27, 116-122, 127-139
+backend\platform_app\api\owner.py              77     41    47%   15-17, 46-49, 69, 73, 84-99, 104-111, 121, 125-136
+backend\platform_app\api\resources.py         144     18    88%   58, 63-64, 66, 68, 70, 86, 108-110, 134, 157, 171-174, 279, 286
+backend\platform_app\api\schemas.py           137      3    98%   129, 167, 174
+backend\platform_app\api\serialization.py       7      1    86%   22
+backend\platform_app\api\webhooks.py           58     11    81%   20-21, 29-30, 39, 66, 81-90
+backend\platform_app\cache.py                  37     13    65%   19-30, 41
+backend\platform_app\config.py                 54     12    78%   43-57
+backend\platform_app\db.py                     63     15    76%   17, 22-24, 41, 71, 78-103
+backend\platform_app\errors.py                  7      0   100%
+backend\platform_app\legacy.py                  5      5     0%   1-12
+backend\platform_app\limiter.py                32      7    78%   25-27, 31-34, 45
+backend\platform_app\main.py                   99     26    74%   25, 31, 34, 46, 56-58, 85, 105, 117-121, 140, 144-158
+backend\platform_app\models\__init__.py         5      0   100%
+backend\platform_app\models\base.py            23      0   100%
+backend\platform_app\models\commerce.py       114      0   100%
+backend\platform_app\models\crm.py            113      0   100%
+backend\platform_app\models\identity.py        85      0   100%
+backend\platform_app\models\operations.py      94      0   100%
+backend\platform_app\runtime.py                28      0   100%
+backend\platform_app\security.py               93      6    94%   23, 38, 56, 100, 112, 116
+backend\platform_app\services\billing.py       35      5    86%   15, 42-45, 64, 66
+backend\platform_app\services\bots.py         178     22    88%   59-83, 88, 101, 131, 154, 157, 162, 185, 190, 228, 236, 293-299, 312, 321, 400
+backend\platform_app\services\channels.py     106     18    83%   12, 18, 24, 28, 56, 65, 71, 74, 121, 157, 161, 175, 182-183, 193-196, 208, 211
+backend\platform_app\services\common.py        24      1    96%   39
+backend\platform_app\services\crm.py           52      8    85%   40-56, 92
+backend\platform_app\services\growth.py        98     33    66%   40, 60, 69, 71, 73, 75, 101-102, 113, 122-123, 156, 161-162, 165-168, 177, 179-202
+backend\platform_app\services\payments.py     185     46    75%   48, 56, 59, 62-63, 68-70, 78, 86, 89, 92, 95, 98, 105, 136, 139, 145, 163, 170-178, 188, 192-214, 232, 253, 255, 259-260, 275, 286, 289, 305, 310, 376, 389
+backend\platform_app\services\receipts.py      60     12    80%   21, 83, 96, 103-112
+backend\platform_app\services\tenants.py       75      5    93%   86, 107, 126, 142, 152
+backend\platform_app\services\texts.py         16      1    94%   52
+backend\platform_app\services\updates.py       92     56    39%   15-78, 99, 101-102, 104-105, 107-121, 127-128, 134, 140-141, 143-150, 155-156, 190-225
+backend\platform_app\telegram.py               65     24    63%   26, 31-35, 39-40, 56-78, 95
+backend\platform_app\worker.py                178     46    74%   75, 107, 116, 118-119, 140, 156-158, 171, 175, 201-202, 207, 220-230, 242-245, 252-255, 276-278, 292-310, 314
+-------------------------------------------------------------------------
+TOTAL                                        2911    581    80%
+Coverage JSON written to file ../../work/coverage.json
+61 passed, 2 warnings in 54.72s

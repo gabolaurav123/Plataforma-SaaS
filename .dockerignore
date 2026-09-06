@@ -1,0 +1,12 @@
+.env*
+apps/
+qa/
+tests/
+docs/
+storage/
+backups/
+*.db*
+.git/
+__pycache__/
+.pytest_cache/
+.coverage

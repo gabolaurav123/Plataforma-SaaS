@@ -1,0 +1,7 @@
+[Unit]
+Description=Daily Creator Platform backup
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target

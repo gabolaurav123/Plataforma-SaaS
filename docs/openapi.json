@@ -1,0 +1,3894 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Creator Engine API",
+    "description": "Central multi-tenant Telegram platform. All amounts are in minor units.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/auth/master": {
+      "post": {
+        "summary": "Auth Master",
+        "operationId": "auth_master_api_auth_master_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "get": {
+        "summary": "Me",
+        "operationId": "me_api_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces": {
+      "post": {
+        "summary": "Workspace",
+        "operationId": "workspace_api_workspaces_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/saas-plans": {
+      "get": {
+        "summary": "Saas Plans",
+        "operationId": "saas_plans_api_saas_plans_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/onboarding": {
+      "get": {
+        "summary": "Onboarding",
+        "operationId": "onboarding_api_t__workspace_id__onboarding_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Save Onboarding",
+        "operationId": "save_onboarding_api_t__workspace_id__onboarding_put",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WizardSave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/templates": {
+      "get": {
+        "summary": "Templates",
+        "operationId": "templates_api_t__workspace_id__templates_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/text-defaults": {
+      "get": {
+        "summary": "Text Defaults",
+        "operationId": "text_defaults_api_t__workspace_id__text_defaults_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/bots/create": {
+      "post": {
+        "summary": "Create Bot",
+        "operationId": "create_bot_api_t__workspace_id__bots_create_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/bots/{bot_id}/settings": {
+      "get": {
+        "summary": "Bot Settings",
+        "operationId": "bot_settings_api_t__workspace_id__bots__bot_id__settings_get",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update Bot",
+        "operationId": "update_bot_api_t__workspace_id__bots__bot_id__settings_put",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/bots/{bot_id}/photo": {
+      "post": {
+        "summary": "Upload Photo",
+        "operationId": "upload_photo_api_t__workspace_id__bots__bot_id__photo_post",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_photo_api_t__workspace_id__bots__bot_id__photo_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/bots/{bot_id}/texts/{key}": {
+      "put": {
+        "summary": "Text Save",
+        "operationId": "text_save_api_t__workspace_id__bots__bot_id__texts__key__put",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextSave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/bots/{bot_id}/repair": {
+      "post": {
+        "summary": "Repair",
+        "operationId": "repair_api_t__workspace_id__bots__bot_id__repair_post",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/bots/{bot_id}/rotate-token": {
+      "post": {
+        "summary": "Rotate",
+        "operationId": "rotate_api_t__workspace_id__bots__bot_id__rotate_token_post",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/bots/{bot_id}/access": {
+      "get": {
+        "summary": "Access",
+        "operationId": "access_api_t__workspace_id__bots__bot_id__access_get",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Access Save",
+        "operationId": "access_save_api_t__workspace_id__bots__bot_id__access_put",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/bots/{bot_id}/readiness": {
+      "get": {
+        "summary": "Readiness",
+        "operationId": "readiness_api_t__workspace_id__bots__bot_id__readiness_get",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/bots/{bot_id}/publish": {
+      "post": {
+        "summary": "Publish",
+        "operationId": "publish_api_t__workspace_id__bots__bot_id__publish_post",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/bots/{bot_id}/connect-channel": {
+      "get": {
+        "summary": "Channel Link",
+        "operationId": "channel_link_api_t__workspace_id__bots__bot_id__connect_channel_get",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/channels/{channel_id}/test": {
+      "post": {
+        "summary": "Channel Test",
+        "operationId": "channel_test_api_t__workspace_id__channels__channel_id__test_post",
+        "parameters": [
+          {
+            "name": "channel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Channel Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/channels/{channel_id}/native-subscription": {
+      "post": {
+        "summary": "Native Channel",
+        "operationId": "native_channel_api_t__workspace_id__channels__channel_id__native_subscription_post",
+        "parameters": [
+          {
+            "name": "channel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Channel Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeSubscription"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/plans": {
+      "post": {
+        "summary": "Create Plan",
+        "operationId": "create_plan_api_t__workspace_id__plans_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/plans/{plan_id}": {
+      "put": {
+        "summary": "Update Plan",
+        "operationId": "update_plan_api_t__workspace_id__plans__plan_id__put",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/providers/{provider}": {
+      "put": {
+        "summary": "Save Provider",
+        "operationId": "save_provider_api_t__workspace_id__providers__provider__put",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderSave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/payments/off-platform-bank": {
+      "post": {
+        "summary": "Bank Payment",
+        "operationId": "bank_payment_api_t__workspace_id__payments_off_platform_bank_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankPayment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/receipts/{receipt_id}/review": {
+      "post": {
+        "summary": "Receipt Review",
+        "operationId": "receipt_review_api_t__workspace_id__receipts__receipt_id__review_post",
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Receipt Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Review"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/receipts/{receipt_id}/image": {
+      "get": {
+        "summary": "Receipt Image",
+        "operationId": "receipt_image_api_t__workspace_id__receipts__receipt_id__image_get",
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Receipt Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/charges/{charge_id}/refund": {
+      "post": {
+        "summary": "Refund",
+        "operationId": "refund_api_t__workspace_id__charges__charge_id__refund_post",
+        "parameters": [
+          {
+            "name": "charge_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Charge Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/contacts/{contact_id}": {
+      "patch": {
+        "summary": "Update Contact",
+        "operationId": "update_contact_api_t__workspace_id__contacts__contact_id__patch",
+        "parameters": [
+          {
+            "name": "contact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Contact Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/contacts/{contact_id}/notes": {
+      "post": {
+        "summary": "Note",
+        "operationId": "note_api_t__workspace_id__contacts__contact_id__notes_post",
+        "parameters": [
+          {
+            "name": "contact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Contact Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Note"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/conversations/{conversation_id}/messages": {
+      "get": {
+        "summary": "Messages",
+        "operationId": "messages_api_t__workspace_id__conversations__conversation_id__messages_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Send Message",
+        "operationId": "send_message_api_t__workspace_id__conversations__conversation_id__messages_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageSend"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/team": {
+      "post": {
+        "summary": "Add Member",
+        "operationId": "add_member_api_t__workspace_id__team_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/team/{member_id}": {
+      "delete": {
+        "summary": "Remove Member",
+        "operationId": "remove_member_api_t__workspace_id__team__member_id__delete",
+        "parameters": [
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Member Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/billing/checkout/{plan_id}": {
+      "post": {
+        "summary": "Billing Checkout",
+        "operationId": "billing_checkout_api_t__workspace_id__billing_checkout__plan_id__post",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/support/tickets": {
+      "post": {
+        "summary": "Support Ticket",
+        "operationId": "support_ticket_api_support_tickets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/b/{public_id}": {
+      "post": {
+        "summary": "Auth Customer",
+        "operationId": "auth_customer_api_auth_b__public_id__post",
+        "parameters": [
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Public Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/b/{public_id}/me": {
+      "get": {
+        "summary": "Profile",
+        "operationId": "profile_api_b__public_id__me_get",
+        "parameters": [
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Public Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/b/{public_id}/plans": {
+      "get": {
+        "summary": "Plans",
+        "operationId": "plans_api_b__public_id__plans_get",
+        "parameters": [
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Public Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/b/{public_id}/checkout": {
+      "post": {
+        "summary": "Checkout",
+        "operationId": "checkout_api_b__public_id__checkout_post",
+        "parameters": [
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Public Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Checkout"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/b/{public_id}/payments/{payment_id}/receipt": {
+      "post": {
+        "summary": "Receipt",
+        "operationId": "receipt_api_b__public_id__payments__payment_id__receipt_post",
+        "parameters": [
+          {
+            "name": "payment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Payment Id"
+            }
+          },
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Public Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_receipt_api_b__public_id__payments__payment_id__receipt_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/b/{public_id}/subscriptions/{subscription_id}/renewal": {
+      "post": {
+        "summary": "Renewal",
+        "operationId": "renewal_api_b__public_id__subscriptions__subscription_id__renewal_post",
+        "parameters": [
+          {
+            "name": "subscription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Subscription Id"
+            }
+          },
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Public Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelRenewal"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/b/{public_id}/support": {
+      "post": {
+        "summary": "Support",
+        "operationId": "support_api_b__public_id__support_post",
+        "parameters": [
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Public Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Note"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/resources/{resource}": {
+      "get": {
+        "summary": "Resources",
+        "operationId": "resources_api_t__workspace_id__resources__resource__get",
+        "parameters": [
+          {
+            "name": "resource",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "name": "bot_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/campaigns": {
+      "post": {
+        "summary": "Campaign Create",
+        "operationId": "campaign_create_api_t__workspace_id__campaigns_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/campaigns/{campaign_id}/action": {
+      "post": {
+        "summary": "Campaign Action",
+        "operationId": "campaign_action_api_t__workspace_id__campaigns__campaign_id__action_post",
+        "parameters": [
+          {
+            "name": "campaign_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Campaign Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/automations": {
+      "post": {
+        "summary": "Automation Create",
+        "operationId": "automation_create_api_t__workspace_id__automations_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/coupons": {
+      "post": {
+        "summary": "Coupon Create",
+        "operationId": "coupon_create_api_t__workspace_id__coupons_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CouponCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/links": {
+      "post": {
+        "summary": "Link Create",
+        "operationId": "link_create_api_t__workspace_id__links_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/analytics": {
+      "get": {
+        "summary": "Analytics",
+        "operationId": "analytics_api_t__workspace_id__analytics_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 365,
+              "minimum": 1,
+              "default": 30,
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{workspace_id}/export/{resource}": {
+      "get": {
+        "summary": "Export",
+        "operationId": "export_api_t__workspace_id__export__resource__get",
+        "parameters": [
+          {
+            "name": "resource",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_api_owner_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/master/capabilities": {
+      "get": {
+        "summary": "Capabilities",
+        "operationId": "capabilities_api_owner_master_capabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/master/configure": {
+      "post": {
+        "summary": "Configure Master",
+        "operationId": "configure_master_api_owner_master_configure_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/resources/{resource}": {
+      "get": {
+        "summary": "Resources",
+        "operationId": "resources_api_owner_resources__resource__get",
+        "parameters": [
+          {
+            "name": "resource",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/tenants/{tenant_id}/action": {
+      "post": {
+        "summary": "Tenant Action",
+        "operationId": "tenant_action_api_owner_tenants__tenant_id__action_post",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/saas-plans/{plan_id}": {
+      "put": {
+        "summary": "Saas Plan",
+        "operationId": "saas_plan_api_owner_saas_plans__plan_id__put",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaaSPlanUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/tenants/{tenant_id}/features/{key}": {
+      "put": {
+        "summary": "Feature Flag",
+        "operationId": "feature_flag_api_owner_tenants__tenant_id__features__key__put",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeatureUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/telegram/webhook/{public_id}": {
+      "post": {
+        "summary": "Webhook",
+        "operationId": "webhook_telegram_webhook__public_id__post",
+        "parameters": [
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Public Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "summary": "Live",
+        "operationId": "live_health_live_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "summary": "Ready",
+        "operationId": "ready_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccessSettings": {
+        "properties": {
+          "is_access_restricted": {
+            "type": "boolean",
+            "title": "Is Access Restricted"
+          },
+          "added_user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Added User Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "is_access_restricted"
+        ],
+        "title": "AccessSettings"
+      },
+      "AutomationCreate": {
+        "properties": {
+          "bot_id": {
+            "type": "string",
+            "title": "Bot Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "trigger": {
+            "type": "string",
+            "title": "Trigger"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Text",
+            "default": ""
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "tag": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Tag",
+            "default": ""
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Title",
+            "default": ""
+          },
+          "delay_seconds": {
+            "type": "integer",
+            "maximum": 2592000.0,
+            "minimum": 0.0,
+            "title": "Delay Seconds",
+            "default": 0
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bot_id",
+          "name",
+          "trigger",
+          "action"
+        ],
+        "title": "AutomationCreate"
+      },
+      "BankPayment": {
+        "properties": {
+          "bot_id": {
+            "type": "string",
+            "title": "Bot Id"
+          },
+          "contact_id": {
+            "type": "string",
+            "title": "Contact Id"
+          },
+          "plan_id": {
+            "type": "string",
+            "title": "Plan Id"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "MXN",
+              "USD"
+            ],
+            "title": "Currency",
+            "default": "MXN"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "Idempotency Key"
+          },
+          "off_platform_order_reference": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 5,
+            "title": "Off Platform Order Reference"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bot_id",
+          "contact_id",
+          "plan_id",
+          "idempotency_key",
+          "off_platform_order_reference"
+        ],
+        "title": "BankPayment"
+      },
+      "Body_receipt_api_b__public_id__payments__payment_id__receipt_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_receipt_api_b__public_id__payments__payment_id__receipt_post"
+      },
+      "Body_upload_photo_api_t__workspace_id__bots__bot_id__photo_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_photo_api_t__workspace_id__bots__bot_id__photo_post"
+      },
+      "BotConfig": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Description",
+            "default": ""
+          },
+          "short_description": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Short Description",
+            "default": ""
+          },
+          "menu_text": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Menu Text",
+            "default": "Mi membresía"
+          },
+          "commands": {
+            "items": {
+              "$ref": "#/components/schemas/Command"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Commands"
+          },
+          "support_username": {
+            "type": "string",
+            "pattern": "^@?[A-Za-z0-9_]{0,64}$",
+            "title": "Support Username",
+            "default": ""
+          },
+          "brand_color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "title": "Brand Color",
+            "default": "#2864ef"
+          },
+          "terms": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Terms",
+            "default": ""
+          },
+          "privacy": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Privacy",
+            "default": ""
+          },
+          "refund": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Refund",
+            "default": ""
+          },
+          "remove_expired_members": {
+            "type": "boolean",
+            "title": "Remove Expired Members",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "BotConfig"
+      },
+      "BotCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "username": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{3,28}[Bb][Oo][Tt]$",
+            "title": "Username"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "username"
+        ],
+        "title": "BotCreate"
+      },
+      "CampaignAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "START",
+              "PAUSE"
+            ],
+            "title": "Action"
+          },
+          "scheduled_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "CampaignAction"
+      },
+      "CampaignCreate": {
+        "properties": {
+          "bot_id": {
+            "type": "string",
+            "title": "Bot Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bot_id",
+          "name",
+          "text"
+        ],
+        "title": "CampaignCreate"
+      },
+      "CancelRenewal": {
+        "properties": {
+          "canceled": {
+            "type": "boolean",
+            "title": "Canceled",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CancelRenewal"
+      },
+      "Checkout": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "title": "Plan Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "Idempotency Key"
+          },
+          "coupon_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coupon Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan_id",
+          "idempotency_key"
+        ],
+        "title": "Checkout"
+      },
+      "Command": {
+        "properties": {
+          "command": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]{1,32}$",
+            "title": "Command"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Description"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "command",
+          "description"
+        ],
+        "title": "Command"
+      },
+      "ContactUpdate": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "opted_out": {
+            "type": "boolean",
+            "title": "Opted Out",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stage"
+        ],
+        "title": "ContactUpdate"
+      },
+      "CouponCreate": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{3,32}$",
+            "title": "Code"
+          },
+          "percent_off": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 1.0,
+            "title": "Percent Off"
+          },
+          "max_redemptions": {
+            "type": "integer",
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Max Redemptions"
+          },
+          "expires_at": {
+            "type": "integer",
+            "title": "Expires At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "percent_off",
+          "max_redemptions",
+          "expires_at"
+        ],
+        "title": "CouponCreate"
+      },
+      "FeatureUpdate": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "FeatureUpdate"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LinkCreate": {
+        "properties": {
+          "bot_id": {
+            "type": "string",
+            "title": "Bot Id"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source"
+          },
+          "campaign": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign"
+          },
+          "referrer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referrer Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bot_id",
+          "source"
+        ],
+        "title": "LinkCreate"
+      },
+      "Login": {
+        "properties": {
+          "init_data": {
+            "type": "string",
+            "maxLength": 16384,
+            "title": "Init Data"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "init_data"
+        ],
+        "title": "Login"
+      },
+      "MemberCreate": {
+        "properties": {
+          "telegram_user_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Telegram User Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "SUPERVISOR",
+              "PAYMENTS",
+              "SALES",
+              "SUPPORT",
+              "READ_ONLY"
+            ],
+            "title": "Role"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "telegram_user_id",
+          "role"
+        ],
+        "title": "MemberCreate"
+      },
+      "MessageSend": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "Idempotency Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text",
+          "idempotency_key"
+        ],
+        "title": "MessageSend"
+      },
+      "NativeSubscription": {
+        "properties": {
+          "price_xtr": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Price Xtr"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "price_xtr"
+        ],
+        "title": "NativeSubscription"
+      },
+      "Note": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "Note"
+      },
+      "OwnerAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "SUSPEND",
+              "REACTIVATE"
+            ],
+            "title": "Action"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 5,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "reason"
+        ],
+        "title": "OwnerAction"
+      },
+      "PlanCreate": {
+        "properties": {
+          "bot_id": {
+            "type": "string",
+            "title": "Bot Id"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Description",
+            "default": ""
+          },
+          "benefits": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Benefits"
+          },
+          "duration_days": {
+            "type": "integer",
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Duration Days",
+            "default": 30
+          },
+          "recurring": {
+            "type": "boolean",
+            "title": "Recurring",
+            "default": false
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/Price"
+            },
+            "type": "array",
+            "maxItems": 6,
+            "minItems": 1,
+            "title": "Prices"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bot_id",
+          "name",
+          "prices"
+        ],
+        "title": "PlanCreate"
+      },
+      "Price": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "BANK_TRANSFER",
+              "TELEGRAM_STARS",
+              "EXTERNAL_HOSTED_PROVIDER"
+            ],
+            "title": "Provider"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "MXN",
+              "USD",
+              "XTR"
+            ],
+            "title": "Currency"
+          },
+          "amount_minor": {
+            "type": "integer",
+            "maximum": 1000000000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Minor"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "currency",
+          "amount_minor"
+        ],
+        "title": "Price"
+      },
+      "ProviderSave": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "bank_name": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Bank Name",
+            "default": ""
+          },
+          "account_holder": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Account Holder",
+            "default": ""
+          },
+          "account": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Account",
+            "default": ""
+          },
+          "clabe": {
+            "type": "string",
+            "pattern": "^(|[0-9]{18})$",
+            "title": "Clabe",
+            "default": ""
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "MXN",
+              "USD"
+            ],
+            "title": "Currency",
+            "default": "MXN"
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Instructions",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "ProviderSave"
+      },
+      "Review": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "APPROVE",
+              "REJECT",
+              "REQUEST_NEW",
+              "SUSPICIOUS"
+            ],
+            "title": "Decision"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Note",
+            "default": ""
+          },
+          "accept_duplicate": {
+            "type": "boolean",
+            "title": "Accept Duplicate",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "Review"
+      },
+      "SaaSPlanUpdate": {
+        "properties": {
+          "amount_xtr": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Amount Xtr"
+          },
+          "bots": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Bots"
+          },
+          "admins": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Admins"
+          },
+          "active_contacts": {
+            "type": "integer",
+            "maximum": 10000000.0,
+            "minimum": 1.0,
+            "title": "Active Contacts"
+          },
+          "campaigns_month": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Campaigns Month"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "amount_xtr",
+          "bots",
+          "admins",
+          "active_contacts",
+          "campaigns_month"
+        ],
+        "title": "SaaSPlanUpdate"
+      },
+      "TenantCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "TenantCreate"
+      },
+      "TextSave": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value"
+        ],
+        "title": "TextSave"
+      },
+      "TicketCreate": {
+        "properties": {
+          "subject": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 3,
+            "title": "Subject"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 3000,
+            "minLength": 5,
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "subject",
+          "text"
+        ],
+        "title": "TicketCreate"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WizardSave": {
+        "properties": {
+          "step": {
+            "type": "integer",
+            "maximum": 9.0,
+            "minimum": 1.0,
+            "title": "Step"
+          },
+          "bot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Id"
+          },
+          "template": {
+            "type": "string",
+            "title": "Template",
+            "default": "creator_subscription"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "step"
+        ],
+        "title": "WizardSave"
+      }
+    }
+  }
+}

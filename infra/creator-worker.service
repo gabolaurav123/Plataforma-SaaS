@@ -1,0 +1,15 @@
+[Unit]
+Description=Creator Platform worker
+After=network-online.target
+[Service]
+WorkingDirectory=/opt/creator-platform
+Environment=PYTHONPATH=/opt/creator-platform/backend
+EnvironmentFile=/opt/creator-platform/.env
+ExecStart=/opt/creator-platform/.venv/bin/python -m platform_app.worker
+Restart=always
+RestartSec=5
+User=creator-platform
+NoNewPrivileges=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target

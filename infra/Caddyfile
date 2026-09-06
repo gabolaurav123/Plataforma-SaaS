@@ -1,0 +1,12 @@
+# Replace hostnames with domains dedicated to this NEW platform.
+api.example.com {
+    reverse_proxy 127.0.0.1:8000
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+    }
+    request_body {
+        max_size 6MB
+    }
+}

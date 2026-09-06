@@ -1,0 +1,1 @@
+{"name":"creator-platform-postgres-qa","private":true,"type":"module","scripts":{"test:rls":"node rls.mjs"},"dependencies":{"@electric-sql/pglite":"^0.3.15"}}

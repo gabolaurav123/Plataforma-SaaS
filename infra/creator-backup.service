@@ -1,0 +1,8 @@
+[Unit]
+Description=Back up the independent Creator Platform database
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/creator-platform
+Environment=BACKUP_DIR=/var/backups/creator-platform
+ExecStart=/bin/sh /opt/creator-platform/scripts/backup.sh
+UMask=0077
