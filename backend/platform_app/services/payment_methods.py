@@ -11,16 +11,19 @@ from .common import audit
 PROVIDERS = {
     "TELEGRAM_STARS": "⭐ Telegram Stars",
     "BANK_TRANSFER": "🏦 Transferencia",
+    "CRYPTO_MANUAL": "🪙 Cripto / Binance",
     "STRIPE": "Stripe",
     "PAYPAL": "PayPal Business",
 }
 PUBLIC_FIELDS = {
+    "CRYPTO_MANUAL": set(),
     "TELEGRAM_STARS": set(),
     "BANK_TRANSFER": {"bank", "holder", "account", "currency", "instructions", "additional", "qr_file_id"},
     "STRIPE": set(),
     "PAYPAL": {"environment", "client_id", "webhook_id"},
 }
 SECRET_FIELDS = {
+    "CRYPTO_MANUAL": set(),
     "STRIPE": {"secret_key", "webhook_secret"},
     "PAYPAL": {"client_secret"},
     "TELEGRAM_STARS": set(),
@@ -127,6 +130,7 @@ def enable(db, runtime, bot, row, actor):
     config = public_config(runtime, row)
     private = secrets(runtime, row) if row.provider in {"STRIPE", "PAYPAL"} else {}
     required = {
+        "CRYPTO_MANUAL": {"wallets"},
         "BANK_TRANSFER": {"bank", "holder", "account", "currency", "instructions"},
         "STRIPE": {"secret_key", "webhook_secret"},
         "PAYPAL": {"client_id", "client_secret", "webhook_id", "environment"},
@@ -135,6 +139,11 @@ def enable(db, runtime, bot, row, actor):
     missing = required - {key for key, value in {**config, **private}.items() if value}
     if missing:
         raise DomainError("PAYMENT_CONFIG_INCOMPLETE", "Faltan campos: " + ", ".join(sorted(missing)))
+    if row.provider == "CRYPTO_MANUAL":
+        from .crypto_wallets import wallets
+
+        if not wallets(db, bot):
+            raise DomainError("PAYMENT_CONFIG_INCOMPLETE", "Añade y activa una dirección de depósito.")
     if row.provider in {"STRIPE", "PAYPAL"} and not runtime.settings.payment_webhooks_enabled:
         raise DomainError(
             "WEBHOOK_SERVICE_REQUIRED",

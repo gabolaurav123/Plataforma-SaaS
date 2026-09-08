@@ -6,6 +6,7 @@ from ..models import BankReceipt, Payment, Contact, now, uid
 from ..security import inspect_receipt
 from ..errors import DomainError
 from .common import audit, emit, send
+from .payments import MANUAL_PROVIDERS
 
 
 class ReceiptService:
@@ -20,11 +21,11 @@ class ReceiptService:
         )
         if (
             not payment
-            or payment.provider != "BANK_TRANSFER"
+            or payment.provider not in MANUAL_PROVIDERS
             or payment.status not in {"PENDING", "RECEIPT_SUBMITTED"}
         ):
             raise DomainError(
-                "RECEIPT_NOT_EXPECTED", "No hay un pago bancario pendiente para este comprobante.", 409
+                "RECEIPT_NOT_EXPECTED", "No hay un pago manual pendiente para este comprobante.", 409
             )
         image = inspect_receipt(data, self.r.settings.max_upload_bytes)
         previous = session.scalar(
@@ -135,7 +136,8 @@ class ReceiptService:
                     "Revisa la alerta de duplicado y confirma expresamente la aprobación.",
                     409,
                 )
-            self.r.payments.confirm(session, bot, payment, f"bank:{payment.id}", actor)
+            prefix = "crypto" if payment.provider == "CRYPTO_MANUAL" else "bank"
+            self.r.payments.confirm(session, bot, payment, f"{prefix}:{payment.id}", actor)
             receipt.status = "APPROVED"
         elif decision == "REJECT":
             if payment.status == "APPROVED":

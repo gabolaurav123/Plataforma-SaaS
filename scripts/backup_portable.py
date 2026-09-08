@@ -35,7 +35,9 @@ def main():
     marker = "-- Running upgrade 0004 -> 0005"
     if args.expect_version == "0004":
         schema = schema.split(marker)[0] + "COMMIT;\n"
-    elif args.expect_version != "0005":
+    elif args.expect_version == "0005":
+        schema = schema.split("-- Running upgrade 0005 -> 0006")[0] + "COMMIT;\n"
+    elif args.expect_version != "0006":
         raise ValueError("Only the checked migration versions are supported")
     engine = create_engine(uri, connect_args={"connect_timeout": 20}, isolation_level="REPEATABLE READ")
     columns_sql = """SELECT c.relname AS table_name, a.attname AS column_name,

@@ -56,9 +56,9 @@ No se necesitan `REDIS_URL`, `PORT`, `PUBLIC_API_URL`, `MINI_APP_URL`, `ALLOWED_
 1. Guardar una copia recuperable de la base y del keyring por separado. El [procedimiento de recuperación](recuperacion.md) incluye una restauración aislada.
 2. Ejecutar las pruebas y verificar las migraciones antes de publicar el código.
 3. Actualizar la misma instancia. Evitar que dos procesos hagan polling del mismo token. Un conflicto 409 se registra como error, no se ignora.
-4. Verificar el registro `telegram_worker_ready`, la revisión `0005`, la ausencia de trabajos fallidos y `/start` seguido de `/admin` en el maestro.
+4. Verificar el registro `telegram_worker_ready`, la revisión `0006`, la ausencia de trabajos fallidos y `/start` seguido de `/admin` en el maestro.
 5. El cliente activa la prueba y conecta su bot; el negocio se configura dentro del bot conectado.
 
 La retirada de accesos vencidos puede demorarse hasta el intervalo de mantenimiento. Los accesos nuevos comprueban la fecha real. Bajar el intervalo aumenta actividad en Neon.
 
-El panel del Worker existente y la [tarifa pública de Seenode](https://seenode.com/pricing) muestran ahora **US$4/mes**, mientras que el presupuesto anterior autorizado era US$3/mes. Confirmar esa diferencia con el propietario antes de activar la actualización; conservar una réplica y la misma instancia. El consumo de Neon depende de su plan. [Workers](https://seenode.com/docs/how-to/deploy-a-worker).
+El Worker existente está activo con una réplica Basic; el panel muestra **US$4/mes**. Esta actualización conserva la misma instancia y no crea servicios adicionales. La tarifa se consulta en [Seenode](https://seenode.com/pricing). El consumo de Neon depende de su plan. [Workers](https://seenode.com/docs/how-to/deploy-a-worker).

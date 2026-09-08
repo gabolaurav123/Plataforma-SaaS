@@ -3605,6 +3605,7 @@
             "type": "string",
             "enum": [
               "BANK_TRANSFER",
+              "CRYPTO_MANUAL",
               "TELEGRAM_STARS",
               "EXTERNAL_HOSTED_PROVIDER"
             ],

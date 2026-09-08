@@ -22,7 +22,9 @@ def test_cash_reports_keep_captures_and_partial_refunds_in_their_actual_periods(
         assert (old["gross_minor"], old["refund_minor"], old["net_minor"]) == (10000, 0, 10000)
         recent = reporting.snapshot(db, bot, timestamp - 20, timestamp + 1)["revenues"][0]
         assert (recent["gross_minor"], recent["refund_minor"], recent["net_minor"]) == (0, 2500, -2500)
-        refunds.record(db, env["r"], bot, charge, 7500, "refund-b", env["ua"])
+        second = refunds.record(db, env["r"], bot, charge, 7500, "refund-b", env["ua"])
+        # This test compares fixed accounting periods, regardless of machine speed.
+        second.created_at = timestamp
         whole = reporting.snapshot(db, bot, timestamp - 110, timestamp + 1)["revenues"][0]
         assert (whole["gross_minor"], whole["refund_minor"], whole["net_minor"]) == (10000, 10000, 0)
         assert charge.refunded_at

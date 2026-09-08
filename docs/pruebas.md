@@ -1,39 +1,33 @@
-# Pruebas de la actualización comercial · 6 de septiembre de 2026
+# Pruebas de Telegram · versión 0.3.0
 
-**135 pruebas aprobadas**, 228,99 segundos, Python 3.14.3. Cobertura de sentencias: **71.08%**. La API de Telegram y los procesadores de pagos se simulan; no se hicieron cobros reales.
+La suite contiene 156 casos. GitHub ejecuta el backend en Python 3.13 con PostgreSQL 18 real, además del esquema PostgreSQL y del frontend opcional conservado. El resultado de cada revisión está en [Platform checks](https://github.com/gabolaurav123/Plataforma-SaaS/actions/workflows/ci.yml); el informe de entrega identifica la revisión comprobada y desplegada.
+
+## Evidencia local de esta actualización
 
 | Comprobación | Resultado |
 |---|---|
-| Suite completa de backend | 135 aprobadas; 0 fallos |
 | Ruff | Sin errores |
-| Migración SQLite con datos de 0004 a 0005 y Alembic check | Datos conservados; sin diferencias de esquema; 0 errores de claves foráneas |
-| PostgreSQL PGlite 17.5, RLS y límites de privilegios | 13 comprobaciones aprobadas |
-| PostgreSQL, migración con registros anteriores | 7 comprobaciones aprobadas |
-| Copia cifrada real de la nueva base Neon | 51 tablas y 113 registros restaurados; igualdad de todas las filas; actualización aislada a 0005 |
-| Frontend opcional conservado | Check, build y build:seenode aprobados; auditoría npm sin vulnerabilidades |
-| Navegación de negocio | Destinos de los 20 botones principales probados en español, inglés y portugués |
-| Rendimiento | Comparación local y reutilización HTTP documentadas; sin prueba de carga real en Seenode |
+| Recorridos Telegram nuevos, anteriores y reportes | 48 pruebas aprobadas después de corregir un reloj variable en una prueba de reembolsos |
+| Suite completa previa a esa corrección de prueba | 150 aprobadas, un fallo de fecha en esa prueba, cinco casos PostgreSQL omitidos por no tener el servidor real local |
+| Cola sobre PostgreSQL PGlite Socket | Tres pruebas aprobadas; concurrencia real y fallo con rollback se ejecutan en PostgreSQL 18 de CI |
+| SQLite: upgrade completo y Alembic check | Sin diferencias de esquema |
+| PostgreSQL PGlite 17.5: RLS y privilegios | 13 comprobaciones aprobadas |
+| PostgreSQL: actualización con datos de 0004 a 0006 | Ocho comprobaciones aprobadas |
+| Respaldo real previo a 0006 | 66 tablas y 431 filas restauradas, igualdad de todas las filas y actualización aislada a 0006 |
+| Rendimiento del recorrido completo | 36 → 17 consultas SQL; comparación aislada con Telegram simulado |
 
 ## Recorridos cubiertos
 
-Alta, prueba explícita de tres días y uso único por propietario; validación de token sin conectar antes de confirmar; cifrado y reemplazo; separación entre negocios y entre bots del mismo espacio; roles y revocación durante asistentes pendientes.
+Mensajes y archivos de clientes al propietario y al equipo con permiso Soporte; respuesta nativa de Telegram al cliente correcto; preservación de formularios abiertos; separación de administradores, negocios y bots; permisos revocados antes de responder o antes de entregar. `/id` en maestro y bots de negocio, registro de una persona nueva sin abrir primero el maestro y sin crear un contacto comprador.
 
-Planes y precios, pagos Stars, transferencias con comprobantes, aprobación repetida, reembolsos parciales, renovación, expiración, accesos personales, invitaciones gratuitas sin pagos artificiales y límites de usos. Stripe y PayPal verifican firmas y estado mediante HTTP simulado, con eventos repetidos e importes incorrectos.
+Billeteras con activo, red, dirección pública, memo y QR; asistente en español, inglés y portugués; selección de red por el comprador; instrucciones conservadas por pedido; importes de cripto sin pérdida de precisión; comprobante manual, aprobación idempotente y reembolso registrado sin conexión al exchange.
 
-Facturación a 30 días, USD 30 más el 4% de USD 1.000 igual a USD 70; ventas, devoluciones y recursos reales en el resumen; tasas históricas; conversión pendiente sin saldo inventado; cambio de plan al siguiente ciclo; liquidaciones parciales, ajustes y suspensión administrativa que no se levanta automáticamente por pagar.
+Las pruebas previas conservan altas y prueba única de tres días, planes, invitaciones por plan, accesos, Stars, transferencias, renovaciones, facturación SaaS, comisiones, devoluciones parciales, reportes, campañas, permisos y aislamiento. El esquema poblado comprueba que los vencimientos, pagos y mensajes anteriores se conservan.
 
-Difusiones con foto y botones: editor, vista previa, confirmación, exclusión de opt-out y otro bot, cola, envío confirmado y rechazo de confirmación repetida. Plantillas editadas/restauradas por idioma; bienvenida predeterminada compatible con publicación. Instrucciones de banco y cripto persistentes y protegidas por permisos. Aviso VIP sin repetición, cancelación notificada y resúmenes configurables.
+PostgreSQL 18 comprueba recepción y offset atómicos, duplicados, rollback ante fallo al insertar el trabajo, orden por chat, reparto entre negocios, dos consumidores concurrentes y entregas inciertas sin reenvío automático.
 
-Reportes con capturas y devoluciones en sus periodos, monedas separadas, CSV aislado y caduco, MRR limitado a renovaciones automáticas compatibles, churn histórico tras cancelación y reactivación e históricos incompletos mostrados como N/D. Fechas locales y cambio de horario estacional.
+## Límites y resultados anteriores
 
-Cola interactiva adelantada a 300 trabajos de fondo, persistencia transaccional de offsets, tareas idempotentes, manejo de 429 y entregas desconocidas, conflictos de polling, errores seguros y recepción vacía sin consultas SQL.
+Telegram y los proveedores de pagos se simulan en las pruebas automatizadas; no se hicieron cobros reales. La comparación con retraso SQL artificial no demuestra el tiempo real del Worker. Los logs de producción permiten medir desde recepción hasta confirmación de envío, sin registrar contenido ni IDs de personas. [Mediciones y método](rendimiento.md).
 
-## Alcance de la evidencia
-
-La cobertura no es del 100% y estas pruebas no demuestran que todo escenario de red, proveedor o carga haya sido validado. Se observaron dos avisos de deprecación de Starlette/AnyIO; no son fallos de la suite. GitHub ejecuta además los checks en Python 3.13 al publicar cada revisión.
-
-La restauración usó datos reales de la base nueva en un PostgreSQL aislado; no cambió Neon. El despliegue de esta revisión requiere verificar la migración 0005, los permisos reales y el Worker activo. La revisión activa y el estado de GitHub deben consultarse en el informe de entrega del despliegue.
-
-Los pagos live y el flujo de venta con un bot/canal real requieren credenciales y una operación del propietario. Stripe/PayPal permanecen desactivados en el Worker sin entrada HTTPS. Las instrucciones de transferencia/cripto de la plataforma aún deben completarse desde Telegram.
-
-Resultados: [test-summary.json](test-summary.json), [salida de pytest](test-output.txt), [JUnit](test-results.xml), [mediciones](rendimiento.md).
+Los archivos [test-summary.json](test-summary.json), [test-output.txt](test-output.txt) y [test-results.xml](test-results.xml) son evidencia histórica de la versión 0.2.0, con 135 pruebas. No representan la versión 0.3.0. La copia cifrada se restauró en PostgreSQL aislado sin modificar Neon. El frontend se verifica en CI pero no se despliega como un servicio adicional.

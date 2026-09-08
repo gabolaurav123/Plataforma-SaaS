@@ -79,7 +79,17 @@ class FakeTelegram:
                         if bid == bot_id and action == "setChatMenuButton":
                             return data["menu_button"]
                     return {}
-                if method == "sendMessage":
+                if method in {
+                    "sendMessage",
+                    "sendPhoto",
+                    "sendVideo",
+                    "sendDocument",
+                    "sendVoice",
+                    "sendAudio",
+                    "sendAnimation",
+                    "sendSticker",
+                    "sendVideoNote",
+                }:
                     return {"message_id": len(api.calls)}
                 if method == "createInvoiceLink":
                     return "https://t.me/$exampleInvoice"

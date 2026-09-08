@@ -83,6 +83,7 @@ def incoming(session, bot, contact, text, message_id):
 
     conv = conversation(session, bot, contact)
     message = Message(
+        id=uid(),
         tenant_id=bot.tenant_id,
         conversation_id=conv.id,
         direction="IN",
@@ -94,14 +95,19 @@ def incoming(session, bot, contact, text, message_id):
     return message
 
 
-def reply(session, bot, conv, actor, text, key):
+def reply(session, bot, conv, actor, text, key, *, media=None, actor_telegram_id=None):
     if conv.bot_id != bot.id or conv.tenant_id != bot.tenant_id:
         raise DomainError("NOT_FOUND", "Conversación no disponible.", 404)
     dedup_key = f"inbox:{bot.tenant_id}:{key}"
     previous = session.scalar(select(Job).where(Job.dedup_key == dedup_key, Job.tenant_id == bot.tenant_id))
     if previous:
         message = session.get(Message, previous.payload["message_id"])
-        if message.conversation_id != conv.id or message.text != text or message.admin_id != actor:
+        if (
+            message.conversation_id != conv.id
+            or message.text != text
+            or message.admin_id != actor
+            or (message.media or {}) != (media or {})
+        ):
             raise DomainError("IDEMPOTENCY_CONFLICT", "La operación ya existe con otros datos.", 409)
         return message
     contact = session.get(Contact, conv.contact_id)
@@ -112,10 +118,21 @@ def reply(session, bot, conv, actor, text, key):
         admin_id=actor,
         direction="OUT",
         text=text,
+        media=media or {},
         status="QUEUED",
     )
     session.add(msg)
     session.flush()
-    send(session, bot, contact.telegram_user_id, text, dedup_key, message_id=msg.id)
+    send(
+        session,
+        bot,
+        contact.telegram_user_id,
+        text,
+        dedup_key,
+        message_id=msg.id,
+        media=media,
+        reply_actor_id=actor_telegram_id,
+        service_message=True,
+    )
     audit(session, bot.tenant_id, actor, "MESSAGE_QUEUED", msg.id)
     return msg

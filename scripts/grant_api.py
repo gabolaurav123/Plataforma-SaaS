@@ -13,5 +13,6 @@ with Runtime().db.system() as db:
     db.execute(text("REVOKE ALL ON auth_sessions FROM platform_api"))
     db.execute(text("REVOKE ALL ON console_states, console_buttons, poll_cursors FROM platform_api"))
     db.execute(text("REVOKE ALL ON platform_settings FROM platform_api"))
+    db.execute(text("REVOKE ALL ON inbox_deliveries FROM platform_api"))
     db.execute(text("REVOKE INSERT, UPDATE, DELETE ON billing_cycles, commission_entries, platform_invoices, platform_settlements, invoice_adjustments, payment_refunds, subscription_history FROM platform_api"))
 print("Granted scoped API access; audit logs are append-only for API role.")

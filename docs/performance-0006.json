@@ -1,0 +1,82 @@
+{
+  "baseline_commit": "b70b29de8f73d82ab33dc823da0e9a16655def6e",
+  "method": "Full PostgreSQL pipeline, Telegram simulated, 100ms added per SQL statement; not live production timing. Pool pings and commit round trips not simulated.",
+  "results": [
+    {
+      "source": "responsiveness-before",
+      "telegram": "simulated",
+      "injected_sql_rtt_ms": 100,
+      "median_ms": 3678.2,
+      "samples": [
+        {
+          "command": "/admin",
+          "elapsed_ms": 3680.98,
+          "sql_statements": 36
+        },
+        {
+          "command": "/start",
+          "elapsed_ms": 3677.2,
+          "sql_statements": 36
+        },
+        {
+          "command": "/admin",
+          "elapsed_ms": 3691.03,
+          "sql_statements": 36
+        },
+        {
+          "command": "/start",
+          "elapsed_ms": 3674.79,
+          "sql_statements": 36
+        },
+        {
+          "command": "/admin",
+          "elapsed_ms": 3678.54,
+          "sql_statements": 36
+        },
+        {
+          "command": "/start",
+          "elapsed_ms": 3677.86,
+          "sql_statements": 36
+        }
+      ]
+    },
+    {
+      "source": "Plataforma-SaaS 0.3.0",
+      "telegram": "simulated",
+      "injected_sql_rtt_ms": 100,
+      "median_ms": 1766.6599999999999,
+      "samples": [
+        {
+          "command": "/admin",
+          "elapsed_ms": 1756.98,
+          "sql_statements": 17
+        },
+        {
+          "command": "/start",
+          "elapsed_ms": 1754.02,
+          "sql_statements": 17
+        },
+        {
+          "command": "/admin",
+          "elapsed_ms": 1863.92,
+          "sql_statements": 18
+        },
+        {
+          "command": "/start",
+          "elapsed_ms": 1776.05,
+          "sql_statements": 17
+        },
+        {
+          "command": "/admin",
+          "elapsed_ms": 1757.27,
+          "sql_statements": 17
+        },
+        {
+          "command": "/start",
+          "elapsed_ms": 1858.34,
+          "sql_statements": 18
+        }
+      ]
+    }
+  ]
+}

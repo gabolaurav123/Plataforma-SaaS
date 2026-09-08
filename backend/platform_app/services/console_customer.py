@@ -8,6 +8,7 @@ from .common import emit, enqueue
 from .texts import bot_text, customer_variables
 from .business import entity, money
 from .i18n import LANGUAGES
+from .payments import MANUAL_PROVIDERS
 
 
 def contact(ui, attribution_code=None):
@@ -102,7 +103,7 @@ def message(ui, message):
             m.Payment.bot_id == ui.bot.id,
             m.Payment.tenant_id == ui.bot.tenant_id,
             m.Payment.contact_id == person.id,
-            m.Payment.provider == "BANK_TRANSFER",
+            m.Payment.provider.in_(MANUAL_PROVIDERS),
             m.Payment.status.in_(["PENDING", "RECEIPT_SUBMITTED"]),
         )
         if state.get("receipt_payment_id"):
@@ -127,17 +128,22 @@ def message(ui, message):
                 ],
             )
         else:
-            ui.say(ui.t("no_pending_transfer"))
+            from .inbox import receive
+
+            receive(ui, person, message)
     else:
-        crm.incoming(
-            ui.db, ui.bot, person, text or message.get("caption", "[Archivo]"), message["message_id"]
-        )
-        ui.say(ui.t("received"))
+        from .inbox import receive
+
+        receive(ui, person, message)
 
 
 def queue_receipt(ui, payment, file_id):
     person = contact(ui)
-    if payment.contact_id != person.id or payment.bot_id != ui.bot.id or payment.provider != "BANK_TRANSFER":
+    if (
+        payment.contact_id != person.id
+        or payment.bot_id != ui.bot.id
+        or payment.provider not in MANUAL_PROVIDERS
+    ):
         raise DomainError("NOT_FOUND", ui.t("no_pending_transfer"), 404)
     enqueue(
         ui.db,
@@ -179,6 +185,10 @@ def prices(ui, plan):
                 )
             )
         )
+        if enabled and row.provider == "CRYPTO_MANUAL":
+            from .crypto_wallets import wallets
+
+            enabled = bool(wallets(ui.db, ui.bot, row.currency))
         if enabled:
             result.append(row)
     return result
@@ -213,7 +223,9 @@ def dispatch(ui, action, d):
                 ui.button(
                     ui.t(
                         "pay_with",
-                        method=payment_methods.PROVIDERS[price.provider],
+                        method=ui.t("crypto_label")
+                        if price.provider == "CRYPTO_MANUAL"
+                        else payment_methods.PROVIDERS[price.provider],
                         amount=money(price.amount_minor, price.currency),
                     ),
                     "buy",
@@ -242,6 +254,24 @@ def dispatch(ui, action, d):
         provider, currency = d.get("provider", "TELEGRAM_STARS"), d.get("currency", "XTR")
         if not any((price.provider, price.currency) == (provider, currency) for price in prices(ui, plan)):
             raise DomainError("PRICE_UNAVAILABLE", ui.t("empty"))
+        if provider == "CRYPTO_MANUAL" and not d.get("wallet_id"):
+            from .crypto_wallets import wallets
+
+            ui.say(
+                ui.t("crypto_choose_network"),
+                [
+                    [
+                        ui.button(
+                            w["asset"] + " · " + w["network"] + " · …" + w["address"][-6:],
+                            "buy",
+                            **d,
+                            wallet_id=w["id"],
+                        )
+                    ]
+                    for w in wallets(db, bot, currency)
+                ],
+            )
+            return
         payment = ui.r.payments.create(
             db,
             bot,
@@ -251,6 +281,7 @@ def dispatch(ui, action, d):
             currency,
             f"native:{bot.id}:{person.id}:{ui.update['update_id']}",
             defer_checkout=True,
+            wallet_id=d.get("wallet_id"),
         )
         emit(db, bot.tenant_id, "PLAN_SELECTED", f"plan-selected:{payment.id}", bot.id, person.id)
         ui.say(ui.t("checkout_queued"))
@@ -258,7 +289,7 @@ def dispatch(ui, action, d):
         payment = entity(db, m.Payment, d["id"], bot)
         if (
             payment.contact_id != person.id
-            or payment.provider != "BANK_TRANSFER"
+            or payment.provider not in MANUAL_PROVIDERS
             or payment.status not in {"PENDING", "RECEIPT_SUBMITTED"}
         ):
             raise DomainError("NOT_FOUND", ui.t("no_pending_transfer"), 404)

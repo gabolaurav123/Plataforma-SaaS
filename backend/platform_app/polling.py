@@ -11,7 +11,7 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from sqlalchemy import select, func, delete, update as sql_update
+from sqlalchemy import select, func, case, delete, update as sql_update
 from . import models as m
 from .runtime import Runtime
 from .worker import Worker
@@ -71,13 +71,6 @@ class Poller:
         for update in updates:
             if self.stop.is_set() or self.engine.stop.is_set():
                 break
-            query = update.get("callback_query")
-            if query:
-                # UI acknowledgement has no business effect and must not wait behind campaigns.
-                try:
-                    self.client.call("answerCallbackQuery", callback_query_id=query["id"])
-                except DomainError:
-                    pass
             store_update(
                 None if self.key == "master" else self.key,
                 self.tenant_id,
@@ -88,6 +81,13 @@ class Poller:
             # Only advance after the update, outbox job and cursor commit together.
             self.offset = update["update_id"] + 1
             self.engine.wake.set()
+            query = update.get("callback_query")
+            if query:
+                # Processing wakes after the durable insert and can overlap this UI acknowledgement.
+                try:
+                    self.client.call("answerCallbackQuery", callback_query_id=query["id"])
+                except DomainError:
+                    pass
 
     def run(self):
         failures = 0
@@ -177,6 +177,10 @@ class PollingEngine:
                 secret = db.scalar(select(m.BotSecret).where(m.BotSecret.bot_id == bot.id))
                 if secret:
                     desired[bot.id] = (bot.tenant_id, self.r.clients.child(db, bot), secret.token_version)
+                    if bot.id not in self.pollers:
+                        enqueue(
+                            db, "REGISTER_COMMANDS", bot.tenant_id, {}, f"commands-id:{bot.id}:0006", bot.id
+                        )
         for key, poller in list(self.pollers.items()):
             if key not in desired or desired[key][2] != poller.version:
                 poller.stop.set()
@@ -235,16 +239,12 @@ class PollingEngine:
     def deadline(self, maintenance_at, lane=None):
         with self.r.db.system() as db:
             dates = [maintenance_at]
-            due = db.scalar(
-                select(func.min(m.Job.run_at)).where(
-                    m.Job.status == "PENDING", m.Job.lane == lane if lane else True
-                )
-            )
-            stale = db.scalar(
-                select(func.min(m.Job.lease_until)).where(
-                    m.Job.status == "RUNNING", m.Job.lane == lane if lane else True
-                )
-            )
+            due, stale = db.execute(
+                select(
+                    func.min(case((m.Job.status == "PENDING", m.Job.run_at))),
+                    func.min(case((m.Job.status == "RUNNING", m.Job.lease_until))),
+                ).where(m.Job.status.in_(["PENDING", "RUNNING"]), m.Job.lane == lane if lane else True)
+            ).one()
             if due is not None:
                 dates.append(due)
             if stale is not None:

@@ -6,6 +6,7 @@ Every action rechecks membership/role; dialogs survive restarts in PostgreSQL.
 
 import json
 import logging
+from contextlib import nullcontext
 from decimal import InvalidOperation
 from datetime import datetime, timezone
 from sqlalchemy import select
@@ -87,8 +88,21 @@ def handle(runtime, session, update, bot=None):
     ):
         return
     ui = Console(runtime, session, bot, update, actor)
+    # These master commands only render navigation; business mutations retain savepoint rollback.
+    navigation_only = (
+        not bot
+        and not query
+        and message.get("text", "").strip()
+        in {
+            "/start",
+            "/menu",
+            "/cancel",
+            "/admin",
+            "/id",
+        }
+    )
     try:
-        with session.begin_nested():
+        with nullcontext() if navigation_only else session.begin_nested():
             ui.run(message, query)
     except (DomainError, ValidationError, ValueError, InvalidOperation) as error:
         # Never echo validation input (which might contain a pasted token).
@@ -184,6 +198,7 @@ class Console:
             f"console:{self.key}:{self.update['update_id']}:{self.count}",
             reply_markup=markup or {"inline_keyboard": (buttons or []) + [footer]},
             service_message=True,
+            ingested_at_ms=self.update.get("_ingested_at_ms"),
         )
 
     def state(self):
@@ -390,6 +405,30 @@ class Console:
                 self.dispatch(action, data)
             return
         text = message.get("text", "").strip()
+        command = text.split(maxsplit=1)[0].split("@", 1) if text else []
+        if (
+            command
+            and command[0].lower() == "/id"
+            and (
+                len(command) == 1
+                or command[1].lower()
+                == (self.bot.username if self.bot else self.r.settings.master_bot_username)
+                .lstrip("@")
+                .lower()
+            )
+        ):
+            if self.bot and not self.user:
+                self.user = tenants.upsert_user(self.db, self.actor)
+            self.say(self.t("ui_67e865c7ff", p0=self.actor["id"]))
+            return
+        if self.bot and message.get("reply_to_message"):
+            from .inbox import native_reply
+
+            if native_reply(self, message):
+                return
+            if self.business_role():
+                self.say(self.t("inbox_reply_target"))
+                return
         if self.bot and self.state().data.get("business") and not self.business_role():
             self.state().data = {}
             self.say(self.t("ui_1202515e3b"))
@@ -415,8 +454,6 @@ class Console:
         elif text.startswith(("/start", "/cancel", "/menu")):
             self.state().data = {}
             self.home()
-        elif text == "/id":
-            self.say(self.t("ui_67e865c7ff", p0=self.actor["id"]))
         elif text.startswith("/admin"):
             self.admin()
         elif text.startswith(("/support", "/paysupport")):

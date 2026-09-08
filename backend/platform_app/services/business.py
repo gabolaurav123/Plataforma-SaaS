@@ -26,6 +26,10 @@ CURRENCY_DECIMALS = {
     "USDC": 6,
     "BTC": 8,
     "ETH": 18,
+    "BNB": 18,
+    "SOL": 9,
+    "TON": 9,
+    "XRP": 6,
 }
 
 
@@ -35,7 +39,7 @@ def amount_minor(value, currency):
     try:
         amount = Decimal(str(value))
         scaled = amount * 10 ** CURRENCY_DECIMALS[currency]
-        if not amount.is_finite() or scaled != scaled.to_integral_value() or not 0 < scaled < 10**16:
+        if not amount.is_finite() or scaled != scaled.to_integral_value() or not 0 < scaled < 2**63:
             raise ValueError()
         return int(scaled)
     except (ValueError, InvalidOperation):
@@ -149,7 +153,7 @@ def save_plan(db, bot, actor, values, plan=None):
 
 
 def price(db, bot, plan, provider, currency, value, actor):
-    if provider not in {"TELEGRAM_STARS", "BANK_TRANSFER", "STRIPE", "PAYPAL"}:
+    if provider not in {"TELEGRAM_STARS", "BANK_TRANSFER", "CRYPTO_MANUAL", "STRIPE", "PAYPAL"}:
         raise DomainError("INVALID_PROVIDER", "Proveedor no soportado.")
     if (
         provider == "TELEGRAM_STARS"
@@ -158,8 +162,13 @@ def price(db, bot, plan, provider, currency, value, actor):
         and currency == "XTR"
     ):
         raise DomainError(
-            "INVALID_CURRENCY", "Stars utiliza XTR; los demás métodos utilizan moneda fiduciaria."
+            "INVALID_CURRENCY", "Stars utiliza XTR. Elige una moneda compatible con el método de pago."
         )
+    if provider == "CRYPTO_MANUAL":
+        from .crypto_wallets import ASSETS
+
+        if currency not in ASSETS:
+            raise DomainError("INVALID_CURRENCY", "Selecciona una moneda cripto del menú.")
     amount = amount_minor(value, currency)
     if provider == "TELEGRAM_STARS" and plan.recurring and amount > 10000:
         raise DomainError("STARS_LIMIT", "La suscripción recurrente admite hasta 10.000 Stars.")
@@ -534,7 +543,7 @@ def set_admin(db, bot, actor, telegram_id, role, permissions=None, *, platform_o
     user = db.scalar(select(m.PlatformUser).where(m.PlatformUser.telegram_user_id == telegram_id))
     if not user:
         raise DomainError(
-            "USER_NOT_REGISTERED", "La persona debe iniciar primero el bot maestro de la plataforma."
+            "USER_NOT_REGISTERED", "Pide a la persona que envíe /id a este bot y usa el ID que le aparece."
         )
     tenant = db.get(m.Tenant, bot.tenant_id)
     if user.id == tenant.owner_user_id:

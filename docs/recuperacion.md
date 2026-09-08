@@ -9,12 +9,12 @@ Antes de una actualización conservar la base y una copia independiente de `ENCR
 Establecer `MIGRATION_DATABASE_URL` y `ENCRYPTION_KEYS` en un entorno privado; no escribirlos en el historial de comandos. Instalar las dependencias Python y `npm ci --prefix qa`.
 
 ```sh
-python scripts/backup_portable.py --expect-host HOST_DIRECTO_NEON --expect-version 0005 --output backups/plataforma.backup.enc --verify
+python scripts/backup_portable.py --expect-host HOST_DIRECTO_NEON --expect-version 0006 --output backups/plataforma.backup.enc --verify
 ```
 
-El script verifica el host, abre una transacción de solo lectura con vista consistente, cifra el respaldo y lo escribe sin sobrescribir otro archivo. `--verify` descifra el archivo guardado y restaura todas las tablas en un PostgreSQL aislado mediante PGlite, comparando cada fila. Para una copia de `0004`, verifica además la actualización a `0005`.
+El script verifica el host, abre una transacción de solo lectura con vista consistente, cifra el respaldo y lo escribe sin sobrescribir otro archivo. `--verify` descifra el archivo guardado y restaura todas las tablas en un PostgreSQL aislado mediante PGlite, comparando cada fila. Admite las revisiones `0004`, `0005` y `0006`; las copias anteriores se actualizan además a `0006` en el entorno aislado.
 
-Se realizó este procedimiento antes de actualizar la base nueva: 51 tablas, 113 registros, revisión `0004`, igualdad de todas las filas y actualización aislada comprobadas. La copia entregada es `Neon-antes-actualizacion-0005.backup.enc`. Corresponde a ese momento, no sustituye respaldos periódicos posteriores.
+Antes de esta actualización se verificó `Neon-antes-actualizacion-0006.backup.enc`: 66 tablas, 431 registros, revisión original `0005`, igualdad de todas las filas restauradas y actualización aislada a `0006`. Se conserva también el respaldo anterior de `0004` (51 tablas, 113 registros). Cada copia corresponde a ese momento y no sustituye respaldos periódicos posteriores.
 
 ## Restauración operativa
 
@@ -22,4 +22,4 @@ Detener el Worker antes de una recuperación real. Crear una base de destino vac
 
 `qa/restore-backup.mjs` solo restaura en su PostgreSQL local aislado. No tiene acceso a Neon y no borra una base de producción. Los scripts anteriores `backup.sh`, `backup.ps1` y `restore-drill.sh` corresponden al despliegue Docker opcional y requieren sus herramientas; no ejecutarlos sobre Seenode sin adaptar el destino.
 
-Si se necesita volver a `0004`, restaurar juntos código y base de esa revisión. No ejecutar un downgrade que elimine libros financieros nuevos. Revisar los pagos recibidos desde el respaldo para reconciliarlos y evitar perder confirmaciones posteriores.
+Si se necesita volver a una revisión anterior, restaurar juntos código y base de esa revisión. No ejecutar un downgrade que elimine libros financieros, conversaciones o instrucciones de pago. Revisar los pagos y mensajes recibidos desde el respaldo para reconciliarlos y evitar perder confirmaciones posteriores.

@@ -25,12 +25,17 @@ def dispatch(ui, action, d):
         rows = []
         for provider, label in methods.PROVIDERS.items():
             row = methods.get(ui.db, ui.bot, provider)
+            label = (
+                ui.t("crypto_label")
+                if provider == "CRYPTO_MANUAL"
+                else ui.t("bank_transfer")
+                if provider == "BANK_TRANSFER"
+                else label
+            )
             rows.append(
                 [
                     ui.button(
-                        ("✅ " if row and row.enabled else "⬜ ") + ui.t("bank_transfer")
-                        if provider == "BANK_TRANSFER"
-                        else ("✅ " if row and row.enabled else "⬜ ") + label,
+                        ("✅ " if row and row.enabled else "⬜ ") + label,
                         "method_edit",
                         provider=provider,
                     )
@@ -60,6 +65,10 @@ def dispatch(ui, action, d):
             field=field,
         )
         return
+    if provider == "CRYPTO_MANUAL":
+        from .console_crypto import menu
+
+        return menu(ui)
     private = methods.secrets(ui.r, row) if provider in {"STRIPE", "PAYPAL"} else {}
     public_config = methods.public_config(ui.r, row)
     text = (

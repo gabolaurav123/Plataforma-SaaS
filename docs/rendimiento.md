@@ -1,5 +1,17 @@
 # Rendimiento: mediciones y límites
 
+## Versión 0.3.0 · recorrido completo
+
+En el historial real del maestro anterior se observaron 48 respuestas: mediana de 7 segundos desde registro del mensaje hasta completar el primer envío, p95 de 9 segundos, con resolución de un segundo.
+
+La nueva versión reduce `/start` y `/admin` de 36 a 17 consultas SQL por recorrido. Con PostgreSQL aislado y 100 ms añadidos por consulta, seis muestras por versión dieron medianas de 3.678 y 1.767 ms. Telegram se simuló; no incluye un retraso artificial por commit/ping y **no representa el tiempo real en Seenode**. [Datos](performance-0006.json), [programa de comparación](../qa/benchmark_pipeline.py).
+
+La recepción guarda offset, mensaje cifrado y trabajo mediante una única operación transaccional. La cola usa una selección atómica que comprueba primero el orden del chat, y evita adquirir trabajos bloqueados. Se mantienen las entregas inciertas sin reenvío automático. Los logs `telegram_response` permiten medir recepción → confirmación de envío en producción.
+
+## Comparación histórica 0.2.0 · renderizado local
+
+Esta medición anterior mide solo el menú y no permite estimar la respuesta completa que percibe el usuario.
+
 Comparación local del código `2c37ad1` y la actualización comercial `0005`, Windows, Python 3.14.3 y SQLite. Dos negocios, dos bots y 10.000 contactos sintéticos adicionales. Se descarta una ejecución inicial y se miden 30 ejecuciones por menú. Las llamadas HTTP usan `httpx.MockTransport`.
 
 | Recorrido | Mediana anterior | Mediana actual | p95 anterior / actual | Consultas SQL anterior / actual |

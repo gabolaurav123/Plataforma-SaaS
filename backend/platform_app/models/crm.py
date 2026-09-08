@@ -45,6 +45,25 @@ class Message(Scoped, Base):
     text: Mapped[str] = mapped_column(String(4096))
     telegram_message_id: Mapped[int | None] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(20), default="QUEUED")
+    media: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class InboxDelivery(Scoped, Base):
+    """A private Telegram message that a particular business admin can reply to."""
+
+    __tablename__ = "inbox_deliveries"
+    __table_args__ = scoped_constraints(
+        tenant_fk("bot_id", "managed_bots"),
+        tenant_fk("message_id", "messages"),
+        UniqueConstraint("message_id", "viewer_id", "part"),
+        UniqueConstraint("bot_id", "viewer_id", "telegram_message_id"),
+    )
+    bot_id: Mapped[str] = mapped_column(String(36))
+    message_id: Mapped[str] = mapped_column(String(36))
+    viewer_id: Mapped[int] = mapped_column(BigInteger)
+    part: Mapped[str] = mapped_column(String(10), default="text")
+    telegram_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(String(20), default="QUEUED")
 
 
 class InternalNote(Scoped, Base):

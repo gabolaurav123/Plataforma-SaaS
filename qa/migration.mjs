@@ -49,13 +49,21 @@ await add('payment_charges', { tenant_id: tenant, payment_id: payment, bot_id: b
 const membership = await add('subscriptions', { tenant_id: tenant, bot_id: bot, contact_id: contact, plan_id: plan, payment_id: payment, starts_at: timestamp, expires_at: timestamp + 30 * 86400, status: 'ACTIVE' });
 const provider = await add('payment_provider_configs', { tenant_id: tenant, provider: 'BANK_TRANSFER', enabled: true, public_config: { currency: 'USD' }, secrets_ciphertext: { encrypted_fixture: 'preserve byte-for-byte' } });
 await add('console_states', { bot_key: 'master', telegram_user_id: 101, data: { flow: 'existing-dialog' }, expires_at: timestamp + 86400 });
+const conversation = await add('conversations', {tenant_id:tenant,bot_id:bot,contact_id:contact,status:'OPEN'});
+const message = await add('messages', {tenant_id:tenant,conversation_id:conversation,direction:'IN',text:'Preserved customer message',status:'RECEIVED',telegram_message_id:81});
 const backup = await db.dumpDataDir('gzip');
 await db.exec('BEGIN;\n' + upgrade);
 
 const checks = [];
 async function check(name, fn) { await fn(); checks.push(name); }
-await check('PostgreSQL upgrades populated 0004 to 0005', async () => {
-  assert.equal((await db.query('SELECT version_num FROM alembic_version')).rows[0].version_num, '0005');
+await check('PostgreSQL upgrades populated 0004 to 0006', async () => {
+  assert.equal((await db.query('SELECT version_num FROM alembic_version')).rows[0].version_num, '0006');
+});
+await check('Native inbox and payment instruction columns preserve existing records', async () => {
+  const row=(await db.query('SELECT text,media FROM messages WHERE id=$1',[message])).rows[0];
+  assert.deepEqual(row,{text:'Preserved customer message',media:{}});
+  assert.deepEqual((await db.query('SELECT instructions_snapshot FROM payments WHERE id=$1',[payment])).rows[0].instructions_snapshot,{});
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM inbox_deliveries')).rows[0].n,0);
 });
 await check('Paid access and purchased channels remain unchanged', async () => {
   const row = (await db.query('SELECT * FROM subscriptions WHERE id=$1', [membership])).rows[0];

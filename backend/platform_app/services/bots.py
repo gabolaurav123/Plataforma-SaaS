@@ -380,6 +380,8 @@ class ManagedBotProvisioner:
             raise
 
     def apply_configuration(self, session, bot, settings):
+        if not any(c.get("command") == "id" for c in settings.commands):
+            settings.commands = [*settings.commands[:99], {"command": "id", "description": "Mi ID de Telegram"}]
         client = self.r.clients.child(session, bot)
         client.call("setMyName", name=bot.name)
         client.call("setMyDescription", description=settings.description)

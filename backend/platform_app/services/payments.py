@@ -21,6 +21,8 @@ from ..db import get_scoped
 from .common import audit, emit, enqueue
 from .tenants import entitlement, feature
 
+MANUAL_PROVIDERS = {"BANK_TRANSFER", "CRYPTO_MANUAL"}
+
 
 class PaymentProvider(Protocol):
     def create_payment(self, session, bot, payment): ...
@@ -91,7 +93,11 @@ class BankTransferProvider:
         raise DomainError("NO_BANK_WEBHOOK", "Las transferencias requieren revisión de comprobante.")
 
     def refund(self, *args):
-        raise DomainError("MANUAL_REFUND_REQUIRED", "El reembolso bancario se realiza en tu banco.", 409)
+        raise DomainError(
+            "MANUAL_REFUND_REQUIRED",
+            "Realiza el reembolso en tu banco o billetera y registra la referencia.",
+            409,
+        )
 
     def cancel_subscription(self, *args):
         return {"automatic_renewal": False}
@@ -119,6 +125,7 @@ class PaymentService:
         self.providers = {
             "TELEGRAM_STARS": TelegramStarsProvider(runtime),
             "BANK_TRANSFER": BankTransferProvider(),
+            "CRYPTO_MANUAL": BankTransferProvider(),
             "EXTERNAL_HOSTED_PROVIDER": ExternalHostedProvider(),
             "STRIPE": HostedProvider(runtime, "STRIPE"),
             "PAYPAL": HostedProvider(runtime, "PAYPAL"),
@@ -137,6 +144,7 @@ class PaymentService:
         context="TELEGRAM",
         coupon_code=None,
         defer_checkout=False,
+        wallet_id=None,
     ):
         entitlement(session, bot.tenant_id)
         if contact.bot_id != bot.id or contact.tenant_id != bot.tenant_id:
@@ -158,6 +166,7 @@ class PaymentService:
             {
                 "TELEGRAM_STARS": "stars",
                 "BANK_TRANSFER": "bank_payments",
+                "CRYPTO_MANUAL": "bank_payments",
                 "EXTERNAL_HOSTED_PROVIDER": "external_payments",
                 "STRIPE": "external_payments",
                 "PAYPAL": "external_payments",
@@ -194,7 +203,18 @@ class PaymentService:
                 previous.currency,
             ) != (contact.id, bot.id, plan_id, provider, currency):
                 raise DomainError("IDEMPOTENCY_CONFLICT", "Esta operación ya existe con otros datos.", 409)
+            if wallet_id and previous.instructions_snapshot.get("wallet_id") != wallet_id:
+                raise DomainError("IDEMPOTENCY_CONFLICT", "Esta operación ya existe con otra billetera.", 409)
             return previous
+        instructions = {}
+        if provider == "CRYPTO_MANUAL":
+            from .crypto_wallets import snapshot
+
+            instructions = snapshot(session, bot, currency, wallet_id)
+        elif provider == "BANK_TRANSFER" and isinstance(config, BotPaymentMethod):
+            from .payment_methods import public_config
+
+            instructions = public_config(self.r, config)
         price = session.scalar(
             select(PlanPrice).where(
                 PlanPrice.tenant_id == bot.tenant_id,
@@ -245,6 +265,7 @@ class PaymentService:
             idempotency_key=idempotency_key,
             invoice_payload=f"customer:{uid()}",
             channel_snapshot=[],
+            instructions_snapshot=instructions,
         )
         from .business import plan_channels
 

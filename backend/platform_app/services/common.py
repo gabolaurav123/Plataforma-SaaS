@@ -9,12 +9,10 @@ def insert_once(session, model, values, columns):
         from sqlalchemy.dialects.postgresql import insert
     else:
         from sqlalchemy.dialects.sqlite import insert
-    statement = (
-        insert(model).values(**values).on_conflict_do_nothing(index_elements=columns).returning(model.id)
-    )
-    identifier = session.scalar(statement)
-    if identifier:
-        return session.get(model, identifier), True
+    statement = insert(model).values(**values).on_conflict_do_nothing(index_elements=columns).returning(model)
+    inserted = session.scalar(statement)
+    if inserted is not None:
+        return inserted, True
     return session.scalar(
         select(model).where(*(getattr(model, key) == values[key] for key in columns))
     ), False
@@ -45,9 +43,6 @@ def enqueue(
     stream_key=None,
     sequence=0,
 ):
-    previous = session.scalar(select(Job).where(Job.dedup_key == dedup_key))
-    if previous:
-        return previous
     job, inserted = insert_once(
         session,
         Job,
@@ -76,9 +71,6 @@ def enqueue(
 
 
 def emit(session, tenant_id, type, key, bot_id=None, contact_id=None, data=None):
-    existing = session.scalar(select(Event).where(Event.tenant_id == tenant_id, Event.dedup_key == key))
-    if existing:
-        return existing
     event, inserted = insert_once(
         session,
         Event,

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:3000"
     session_ttl_seconds: int = 1800
     init_data_max_age_seconds: int = 300
-    trial_days: int = Field(default=3, ge=1, le=3)
+    trial_days: int = Field(default=3, ge=3, le=3)
     billing_grace_days: int = Field(default=3, ge=0, le=14)
     background_workers: int = Field(default=2, ge=1, le=8)
     interactive_workers: int = Field(default=2, ge=1, le=8)

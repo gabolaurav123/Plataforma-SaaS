@@ -86,6 +86,7 @@ class Payment(Scoped, Base):
     status: Mapped[str] = mapped_column(String(30), default="PENDING", index=True)
     provider_reference: Mapped[str | None] = mapped_column(String(255), index=True)
     channel_snapshot: Mapped[list] = mapped_column(JSON, default=list)
+    instructions_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     idempotency_key: Mapped[str] = mapped_column(String(160))
     invoice_payload: Mapped[str] = mapped_column(String(128), unique=True)
     checkout_url: Mapped[str | None] = mapped_column(String(1024))

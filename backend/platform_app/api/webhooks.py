@@ -1,17 +1,98 @@
 import hmac
 import json
+import time
 from copy import deepcopy
 from fastapi import APIRouter, Request, Depends
 from starlette.concurrency import run_in_threadpool
-from sqlalchemy import select
+from sqlalchemy import select, func, literal
 from sqlalchemy.exc import IntegrityError
 from ..models import ManagedBot, BotSecret, TelegramUpdate, uid
 from ..security import digest
 from ..errors import DomainError
-from ..services.common import enqueue
+from ..services.common import enqueue, insert_once
 from .auth import runtime
 
 router = APIRouter()
+
+
+def store_polling_postgres(session, bot_id, tenant_id, update, values):
+    """Commit offset, encrypted update and its outbox job with a single round trip."""
+    from sqlalchemy.dialects.postgresql import insert
+    from ..models import PollCursor, Job
+
+    key = bot_id or "master"
+    timestamp = int(time.time())
+
+    def explicit(model, data):
+        return {name: literal(value, type_=model.__table__.c[name].type) for name, value in data.items()}
+
+    cursor = insert(PollCursor).values(
+        **explicit(
+            PollCursor,
+            dict(
+                id=uid(),
+                bot_key=key,
+                next_offset=update["update_id"] + 1,
+                created_at=timestamp,
+                updated_at=timestamp,
+            ),
+        )
+    )
+    cursor = cursor.on_conflict_do_update(
+        index_elements=["bot_key"],
+        set_={"next_offset": func.greatest(PollCursor.next_offset, cursor.excluded.next_offset)},
+    ).cte("advanced_cursor")
+    accepted = (
+        insert(TelegramUpdate)
+        .values(
+            **explicit(
+                TelegramUpdate,
+                {
+                    **values,
+                    "created_at": timestamp,
+                    "updated_at": timestamp,
+                    "status": "PENDING",
+                },
+            )
+        )
+        .on_conflict_do_nothing(index_elements=["bot_key", "update_id"])
+        .returning(TelegramUpdate.id)
+        .cte("accepted_update")
+    )
+    actor = update.get("callback_query", {}).get("from") or update.get("message", {}).get("from") or {}
+    job = dict(
+        id=uid(),
+        tenant_id=tenant_id,
+        bot_id=bot_id,
+        kind="UPDATE",
+        created_at=timestamp,
+        updated_at=timestamp,
+        status="PENDING",
+        attempts=0,
+        payload={"update_id": values["id"]},
+        dedup_key=f"update:{key}:{update['update_id']}",
+        run_at=timestamp,
+        lane="interactive",
+        stream_key=f"{key}:{actor.get('id', 'service')}",
+        sequence=update["update_id"] * 100,
+    )
+    statement = (
+        insert(Job)
+        .from_select(
+            list(job),
+            select(
+                *(literal(value, type_=Job.__table__.c[name].type) for name, value in job.items())
+            ).select_from(accepted),
+            include_defaults=False,
+        )
+        .on_conflict_do_nothing(index_elements=["dedup_key"])
+        .returning(Job.id)
+        .add_cte(cursor)
+    )
+    inserted = session.scalar(statement)
+    if inserted:
+        session.info["jobs_enqueued"] = True
+    return {"ok": True, **({"duplicate": True} if not inserted else {})}
 
 
 @router.post("/telegram/webhook/{public_id}", status_code=200)
@@ -47,38 +128,47 @@ def store_update(bot_id, tenant_id, update, r, *, polling=False):
     if not isinstance(update, dict) or type(update.get("update_id")) is not int:
         raise DomainError("INVALID_UPDATE", "Update no válido.")
     bot_key = bot_id or "master"
+    ingested_at_ms = int(time.time() * 1000)
     try:
         with r.db.system() as session:
             bot = session.get(ManagedBot, bot_id) if bot_id else None
             if bot_id and (not bot or bot.tenant_id != tenant_id):
                 raise DomainError("BOT_NOT_FOUND", "Bot no disponible.", 404)
-            if polling:
+            fast_polling = (
+                polling and session.bind.dialect.name == "postgresql" and not update.get("pre_checkout_query")
+            )
+            if polling and not fast_polling:
                 from ..models import PollCursor
 
-                cursor = session.scalar(
-                    select(PollCursor).where(PollCursor.bot_key == bot_key).with_for_update()
+                pg = session.bind.dialect.name == "postgresql"
+                if pg:
+                    from sqlalchemy.dialects.postgresql import insert
+                else:
+                    from sqlalchemy.dialects.sqlite import insert
+                statement = insert(PollCursor).values(bot_key=bot_key, next_offset=update["update_id"] + 1)
+                session.execute(
+                    statement.on_conflict_do_update(
+                        index_elements=["bot_key"],
+                        set_={
+                            "next_offset": (func.greatest if pg else func.max)(
+                                PollCursor.next_offset, statement.excluded.next_offset
+                            )
+                        },
+                    )
                 )
-                if not cursor:
-                    cursor = PollCursor(bot_key=bot_key, next_offset=0)
-                    session.add(cursor)
-                cursor.next_offset = max(cursor.next_offset or 0, update["update_id"] + 1)
-            existing = session.scalar(
-                select(TelegramUpdate.id).where(
-                    TelegramUpdate.bot_key == bot_key, TelegramUpdate.update_id == update["update_id"]
-                )
-            )
-            if existing:
-                return {"ok": True, "duplicate": True}
             safe_update, encrypted = deepcopy(update), None
+            safe_update["_ingested_at_ms"] = ingested_at_ms
             message = update.get("message", {})
-            if message.get("chat", {}).get("type") == "private" and (
-                message.get("text") or message.get("caption")
-            ):
+            if message.get("chat", {}).get("type") == "private":
                 encrypted = r.vault.encrypt(json.dumps(update), f"transport:{bot_key}:{update['update_id']}")
+                # Includes captions, nested replies and media; keep only routing/timing metadata public.
+                safe_update["message"] = {
+                    k: v for k, v in message.items() if k in {"message_id", "date", "from", "chat"}
+                }
                 for key in ("text", "caption"):
-                    if key in safe_update["message"]:
+                    if key in message:
                         safe_update["message"][key] = "[ENCRYPTED]"
-            stored = TelegramUpdate(
+            values = dict(
                 id=uid(),
                 bot_key=bot_key,
                 tenant_id=tenant_id,
@@ -86,8 +176,11 @@ def store_update(bot_id, tenant_id, update, r, *, polling=False):
                 payload=safe_update,
                 sensitive_ciphertext=encrypted,
             )
-            session.add(stored)
-            session.flush()
+            if fast_polling:
+                return store_polling_postgres(session, bot_id, tenant_id, update, values)
+            stored, inserted = insert_once(session, TelegramUpdate, values, ["bot_key", "update_id"])
+            if not inserted:
+                return {"ok": True, "duplicate": True}
             if update.get("pre_checkout_query"):
                 # Dedicated fast path; never wait behind campaigns (Telegram has a 10s deadline).
                 query = update["pre_checkout_query"]

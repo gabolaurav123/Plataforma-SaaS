@@ -35,17 +35,17 @@ try {
     const sort=rows=>rows.sort((a,b)=>canonical(a).localeCompare(canonical(b)));
     assert.deepEqual(sort(rows),sort(table.rows));
   }
-  if (backup.version==='0004') {
+  if (['0004','0005'].includes(backup.version)) {
     stage='upgrade';
     const schema=await readFile(new URL('../docs/schema-postgres.sql',import.meta.url),'utf8');
-    await db.exec('BEGIN;'+schema.split('-- Running upgrade 0004 -> 0005')[1]);
-    assert.equal((await db.query('SELECT version_num FROM alembic_version')).rows[0].version_num,'0005');
+    await db.exec('BEGIN;'+schema.split(backup.version==='0004'?'-- Running upgrade 0004 -> 0005':'-- Running upgrade 0005 -> 0006')[1]);
+    assert.equal((await db.query('SELECT version_num FROM alembic_version')).rows[0].version_num,'0006');
     for (const [name,table] of Object.entries(backup.tables)) {
       assert.equal((await db.query(`SELECT count(*)::int AS total FROM ${quote(name)}`)).rows[0].total,table.rows.length);
     }
   }
   await db.close();
-  console.log(JSON.stringify({restore_verified:true,all_original_rows_equal:true,tables:Object.keys(backup.tables).length,isolated_upgrade_verified:backup.version==='0004'}));
+  console.log(JSON.stringify({restore_verified:true,all_original_rows_equal:true,tables:Object.keys(backup.tables).length,isolated_upgrade_verified:['0004','0005'].includes(backup.version)}));
 } catch(error) {
   console.log(JSON.stringify({restore_failed:true,stage,code:error.code || error.name}));
   process.exitCode=1;

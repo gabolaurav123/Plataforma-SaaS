@@ -119,6 +119,7 @@ class Database:
                 "poll_cursors",
                 "auth_sessions",
                 "platform_settings",
+                "inbox_deliveries",
             ]:
                 if connection.scalar(
                     text(

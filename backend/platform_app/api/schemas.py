@@ -59,7 +59,7 @@ class TextSave(Input):
 
 
 class Price(Input):
-    provider: Literal["BANK_TRANSFER", "TELEGRAM_STARS", "EXTERNAL_HOSTED_PROVIDER"]
+    provider: Literal["BANK_TRANSFER", "CRYPTO_MANUAL", "TELEGRAM_STARS", "EXTERNAL_HOSTED_PROVIDER"]
     currency: Literal["MXN", "USD", "XTR"]
     amount_minor: StrictInt = Field(gt=0, le=1_000_000_000_000)
 

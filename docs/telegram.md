@@ -44,3 +44,7 @@ Reportes genera CSV privado con operaciones y referencias reales, por fechas y m
 Una extensión gratuita no inventa ingresos: amplía el ciclo sin una cuota fija adicional, mantiene la comisión de ventas y registra el motivo. Las deudas pendientes deben resolverse mediante pagos o ajustes explícitos. Una suspensión administrativa no se levanta automáticamente por un pago.
 
 Transferencia y cripto se configuran en **Pagos SaaS → Métodos de cobro**. Allí se guardan banco, titular, cuenta y moneda, o activo, red y dirección pública. Nunca se necesitan claves privadas de una cartera. El cliente presenta la referencia y el comprobante; el propietario verifica el ingreso antes de aprobar.
+
+## Mensajes, /id y cripto
+
+Consulta [los pasos de la versión 0.3.0](mejoras-0006.md) para responder a clientes con Responder de Telegram, obtener el ID desde cada bot y configurar billeteras de Binance por moneda y red. Los enlaces de invitación existentes conservan sus condiciones.

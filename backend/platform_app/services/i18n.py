@@ -553,6 +553,11 @@ CATALOG.update(
 )
 
 
+from .experience_catalog import CATALOG as EXPERIENCE_CATALOG  # noqa: E402
+
+CATALOG.update(EXPERIENCE_CATALOG)
+
+
 def message(value, language="es"):
     return t(value["key"], language, **value.get("values", {})) if isinstance(value, dict) else value
 

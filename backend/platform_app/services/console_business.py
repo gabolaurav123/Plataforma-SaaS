@@ -553,7 +553,9 @@ def detail(ui, d):
             [
                 [
                     ui.button(
-                        ui.t("ui_df139d8928") if row.provider == "BANK_TRANSFER" else ui.t("ui_ab226e805f"),
+                        ui.t("ui_df139d8928")
+                        if row.provider in {"BANK_TRANSFER", "CRYPTO_MANUAL"}
+                        else ui.t("ui_ab226e805f"),
                         "charge_refund",
                         id=row.id,
                     )
@@ -725,7 +727,7 @@ def dispatch(ui, action, d):
         if remaining <= 0:
             return detail(ui, {"resource": "charges", "id": charge.id})
         if action == "charge_refund":
-            if charge.provider == "BANK_TRANSFER":
+            if charge.provider in {"BANK_TRANSFER", "CRYPTO_MANUAL"}:
                 ui.ask(
                     "biz:bank_refund",
                     ui.t("ui_e0757e6bc4") + charge.currency + ui.t("ui_a94f745d4e"),
@@ -736,7 +738,7 @@ def dispatch(ui, action, d):
                     ui.t("ui_d5d63bad38") + b.money(remaining, charge.currency) + ui.t("ui_d21d088519"),
                     [[ui.button(ui.t("ui_2c76fd9a05"), "charge_refund_confirm", id=charge.id)]],
                 )
-        elif charge.provider == "BANK_TRANSFER":
+        elif charge.provider in {"BANK_TRANSFER", "CRYPTO_MANUAL"}:
             from .refunds import record
 
             record(ui.db, ui.r, ui.bot, charge, d["amount"], d["reference"], ui.user.id, d["reason"])
@@ -796,6 +798,7 @@ def dispatch(ui, action, d):
                 for key, label in [
                     ("TELEGRAM_STARS", "Telegram Stars"),
                     ("BANK_TRANSFER", ui.t("ui_4ed786ebd4")),
+                    ("CRYPTO_MANUAL", ui.t("crypto_label")),
                     ("STRIPE", "Stripe"),
                     ("PAYPAL", "PayPal"),
                 ]
@@ -806,11 +809,17 @@ def dispatch(ui, action, d):
         if d["provider"] == "TELEGRAM_STARS":
             ui.ask("biz:price", ui.t("ui_3651a93138"), **d, currency="XTR")
         else:
+            from .crypto_wallets import ASSETS
+
             ui.say(
                 ui.t("ui_cf2563451a"),
                 [
                     [ui.button(currency, "price_amount", **d, currency=currency)]
-                    for currency in ["USD", "EUR", "BOB", "MXN", "BRL", "PEN", "COP", "ARS", "CLP", "GBP"]
+                    for currency in (
+                        ASSETS
+                        if d["provider"] == "CRYPTO_MANUAL"
+                        else ["USD", "EUR", "BOB", "MXN", "BRL", "PEN", "COP", "ARS", "CLP", "GBP"]
+                    )
                 ],
             )
     elif action == "price_amount":
@@ -1138,6 +1147,10 @@ def dispatch(ui, action, d):
         from .console_payments import dispatch as payment_dispatch
 
         payment_dispatch(ui, action, d)
+    elif action.startswith("wallet_"):
+        from .console_crypto import dispatch as crypto_dispatch
+
+        crypto_dispatch(ui, action, d)
     elif action in {"templates", "template_select", "template_edit", "template_restore"}:
         from .console_templates import dispatch as template_dispatch
 
@@ -1482,6 +1495,10 @@ def answer(ui, text, message):
         ui.r.reports.request(ui.db, ui.bot, ui.user, int(start.timestamp()), int(end.timestamp()))
         ui.state().data = {}
         ui.say(ui.t("report_queued"))
+    elif flow.startswith("crypto_"):
+        from .console_crypto import answer as crypto_answer
+
+        crypto_answer(ui, flow, state, text, message)
     elif flow.startswith("method_"):
         from .console_payments import answer as payment_answer
 

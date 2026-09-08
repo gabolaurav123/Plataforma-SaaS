@@ -6,6 +6,8 @@ Telegram Stars usa facturas reales, validación de precheckout y `successful_pay
 
 Transferencia muestra banco, titular, cuenta, moneda, instrucciones y QR del negocio. Los comprobantes son imágenes o PDF, cifrados y accesibles solo a los roles autorizados. Se detectan hashes exactos y similitudes entre los 500 comprobantes recientes del último año; esto es una señal de revisión, no prueba de pago ni garantía antifraude. La aprobación sospechosa pide confirmación expresa de que se verificó el ingreso.
 
+Cripto / Binance guarda hasta 20 direcciones públicas por bot, con activo, red, memo, instrucciones y QR. El pedido conserva una copia de su destino; el cliente presenta un comprobante y el equipo revisa el ingreso. No hay conexión con una API de Binance ni movimientos de fondos. [Configuración paso a paso](mejoras-0006.md).
+
 Stripe y PayPal tienen credenciales cifradas por bot. Los importes salen del servidor y de la compra guardada. La página de retorno nunca activa una suscripción. Las confirmaciones verifican proveedor, firma, cuenta, referencia, importe, moneda y estado; los duplicados no vuelven a activar acceso.
 
 Una confirmación que llega antes de guardar el pago se reintenta durante un intervalo acotado. Si sigue sin correspondencia queda para revisión y puede reconciliarse desde Pagos → Confirmaciones del proveedor. El cuerpo cifrado se conserva hasta 14 días en fallos/revisión; al completarse se elimina.

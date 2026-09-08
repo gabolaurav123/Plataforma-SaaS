@@ -12,7 +12,7 @@ await db.exec(`
   CREATE ROLE tenant_api_test NOLOGIN NOSUPERUSER NOBYPASSRLS;
   GRANT USAGE ON SCHEMA public TO tenant_api_test;
   GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO tenant_api_test;
-  REVOKE ALL ON console_states, console_buttons, poll_cursors, auth_sessions, platform_settings FROM tenant_api_test;
+  REVOKE ALL ON console_states, console_buttons, poll_cursors, auth_sessions, platform_settings, inbox_deliveries FROM tenant_api_test;
   REVOKE INSERT, UPDATE, DELETE ON billing_cycles, commission_entries, platform_invoices, platform_settlements, invoice_adjustments, payment_refunds, subscription_history FROM tenant_api_test;
   REVOKE UPDATE, DELETE ON audit_logs FROM tenant_api_test;
   INSERT INTO platform_users(id,created_at,updated_at,telegram_user_id,first_name,locale) VALUES
@@ -37,7 +37,7 @@ await check('Scoped API cannot rewrite commercial ledgers or audit records', asy
   }
 });
 await check('API role cannot access private Telegram state or polling cursors', async () => {
-  for (const table of ['console_states', 'console_buttons', 'poll_cursors', 'auth_sessions', 'platform_settings']) {
+  for (const table of ['console_states', 'console_buttons', 'poll_cursors', 'auth_sessions', 'platform_settings', 'inbox_deliveries']) {
     await assert.rejects(db.query(`select * from ${table}`), /permission denied/);
   }
 });

@@ -347,12 +347,20 @@ def process(runtime, db, job, bot):
             + money(payment.amount_minor, payment.currency)
         )
         buttons = []
-        if payment.provider == "BANK_TRANSFER":
-            method = payment_methods.get(db, bot, payment.provider)
-            config = payment_methods.public_config(runtime, method) if method else {}
-            message += "\n" + "\n".join(
-                str(config.get(k, "")) for k in ["bank", "holder", "account", "instructions", "additional"]
-            )
+        if payment.provider in {"BANK_TRANSFER", "CRYPTO_MANUAL"}:
+            config = payment.instructions_snapshot or {}
+            if not config and payment.provider == "BANK_TRANSFER":
+                method = payment_methods.get(db, bot, payment.provider)
+                config = payment_methods.public_config(runtime, method) if method else {}
+                payment.instructions_snapshot = config
+            if payment.provider == "CRYPTO_MANUAL":
+                from .console_crypto import details
+
+                message += "\n\n" + details(ui, config) + "\n\n" + ui.t("crypto_payment_notice")
+            else:
+                message += "\n" + "\n".join(
+                    str(config.get(k, "")) for k in ["bank", "holder", "account", "instructions", "additional"]
+                )
             message += "\n" + bot_text(db, bot, "RECEIPT_REQUEST", locale=person.locale)
             buttons = [[ui.button(ui.t("send_receipt"), "receipt_for", id=payment.id)]]
             if config.get("qr_file_id"):

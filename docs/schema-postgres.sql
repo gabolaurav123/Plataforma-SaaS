@@ -2029,5 +2029,49 @@ DO $$ BEGIN IF EXISTS (SELECT FROM pg_roles WHERE rolname='platform_api') THEN R
 
 UPDATE alembic_version SET version_num='0005' WHERE alembic_version.version_num = '0004';
 
+-- Running upgrade 0005 -> 0006
+
+ALTER TABLE messages ADD COLUMN media JSON DEFAULT '{}' NOT NULL;
+
+ALTER TABLE messages ALTER COLUMN media DROP DEFAULT;
+
+ALTER TABLE payments ADD COLUMN instructions_snapshot JSON DEFAULT '{}' NOT NULL;
+
+ALTER TABLE payments ALTER COLUMN instructions_snapshot DROP DEFAULT;
+
+CREATE TABLE inbox_deliveries (
+    id VARCHAR(36) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    tenant_id VARCHAR(36) NOT NULL,
+    bot_id VARCHAR(36) NOT NULL,
+    message_id VARCHAR(36) NOT NULL,
+    viewer_id BIGINT NOT NULL,
+    part VARCHAR(10) NOT NULL,
+    telegram_message_id BIGINT,
+    status VARCHAR(20) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE (tenant_id, id),
+    UNIQUE (message_id, viewer_id, part),
+    UNIQUE (bot_id, viewer_id, telegram_message_id),
+    FOREIGN KEY(tenant_id, bot_id) REFERENCES managed_bots (tenant_id, id),
+    FOREIGN KEY(tenant_id, message_id) REFERENCES messages (tenant_id, id),
+    FOREIGN KEY(tenant_id) REFERENCES tenants (id)
+);
+
+CREATE INDEX ix_inbox_deliveries_created_at ON inbox_deliveries (created_at);
+
+CREATE INDEX ix_inbox_deliveries_tenant_id ON inbox_deliveries (tenant_id);
+
+ALTER TABLE inbox_deliveries ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE inbox_deliveries FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON inbox_deliveries USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), ''));
+
+DO $$ BEGIN IF EXISTS (SELECT FROM pg_roles WHERE rolname='platform_api') THEN REVOKE ALL ON inbox_deliveries FROM platform_api; END IF; END $$;
+
+UPDATE alembic_version SET version_num='0006' WHERE alembic_version.version_num = '0005';
+
 COMMIT;
 

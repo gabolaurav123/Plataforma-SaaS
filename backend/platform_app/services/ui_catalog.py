@@ -361,9 +361,9 @@ UI_CATALOG = {
     "ui_4de0ad27ba": ("👥 Audiencia", "👥 Audience", "👥 Público"),
     "ui_4e50ea9483": ("Producto físico", "Physical product", "Produto físico"),
     "ui_4e5a0f2f0f": (
-        "Confirma que la devolución bancaria ya se realizó: ",
-        "Confirm that the bank refund was already completed: ",
-        "Confirme que a devolução bancária já foi realizada: ",
+        "Confirma que la devolución ya se realizó: ",
+        "Confirm that the refund was already completed: ",
+        "Confirme que a devolução já foi realizada: ",
     ),
     "ui_4ea54faa94": ("Duración (días)", "Duration (days)", "Duração (dias)"),
     "ui_4ed786ebd4": ("Transferencia", "Bank transfer", "Transferência"),
@@ -636,9 +636,9 @@ UI_CATALOG = {
     ),
     "ui_8726db0139": ("Client ID", "Client ID", "ID do cliente"),
     "ui_875aaa7522": (
-        "\n⚠️ El comprobante está marcado como sospechoso o duplicado. Verifica en tu banco que corresponde a un ingreso distinto antes de aprobar.",
-        "\n⚠️ This receipt is flagged as suspicious or duplicated. Verify in your bank that it represents a separate incoming payment before approving.",
-        "\n⚠️ Este comprovante está marcado como suspeito ou duplicado. Verifique no banco se corresponde a um recebimento distinto antes de aprovar.",
+        "\n⚠️ El comprobante está marcado como sospechoso o duplicado. Verifica en tu banco o billetera que corresponde a un ingreso distinto antes de aprobar.",
+        "\n⚠️ This receipt is flagged as suspicious or duplicated. Verify in your bank or wallet that it represents a separate incoming payment before approving.",
+        "\n⚠️ Este comprovante está marcado como suspeito ou duplicado. Verifique no banco ou carteira se corresponde a um recebimento distinto antes de aprovar.",
     ),
     "ui_87c806ea25": (
         "Pulsa Crear mi bot y confirma la creación en Telegram. Después vuelve aquí a /start.",
@@ -1018,7 +1018,7 @@ UI_CATALOG = {
         "\nOpen the new master bot in @BotFather and enable Bot Management Mode.",
         "\nAbra o novo bot principal em @BotFather e ative Bot Management Mode.",
     ),
-    "ui_df139d8928": ("Registrar devolución bancaria", "Record bank refund", "Registrar devolução bancária"),
+    "ui_df139d8928": ("Registrar devolución manual", "Record manual refund", "Registrar devolução manual"),
     "ui_dfee336770": ("Idiomas", "Languages", "Idiomas"),
     "ui_e0161a4c98": (
         "💳 Finanzas de MI plataforma\nCobrado: USD {p0:.2f}\nFacturas pendientes: {p1}",
@@ -1026,9 +1026,9 @@ UI_CATALOG = {
         "💳 Finanças da MINHA plataforma\nRecebido: USD {p0:.2f}\nFaturas pendentes: {p1}",
     ),
     "ui_e0757e6bc4": (
-        "Realiza primero la devolución en tu banco. Envía importe en ",
-        "First complete the refund in your bank. Send the amount in ",
-        "Primeiro realize a devolução no banco. Envie o valor em ",
+        "Realiza primero la devolución en tu banco o billetera. Envía importe en ",
+        "First complete the refund in your bank or wallet. Send the amount in ",
+        "Primeiro realize a devolução no banco ou carteira. Envie o valor em ",
     ),
     "ui_e0e251a172": ("Webhook ID", "Webhook ID", "ID do webhook"),
     "ui_e125d78231": ("📺 Canales incluidos", "📺 Included channels", "📺 Canais incluídos"),
