@@ -70,8 +70,10 @@ def seed_saas_plans(session):
     session.flush()
 
 
-def upsert_user(session, user):
-    obj = session.scalar(select(PlatformUser).where(PlatformUser.telegram_user_id == user["id"]))
+def upsert_user(session, user, *, existing=None):
+    if existing is not None and existing.telegram_user_id != user["id"]:
+        raise DomainError("USER_MISMATCH", "Identidad no disponible.", 403)
+    obj = existing or session.scalar(select(PlatformUser).where(PlatformUser.telegram_user_id == user["id"]))
     if not obj:
         from .common import insert_once
         from .i18n import locale

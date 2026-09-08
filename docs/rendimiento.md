@@ -1,5 +1,13 @@
 # Rendimiento: mediciones y límites
 
+## Versión 0.3.1 · continuidad del envío
+
+La primera actualización se midió en Seenode: seis respuestas del maestro, mediana de cinco segundos y p95 de cinco, con resolución de un segundo. El usuario también informó aproximadamente cinco segundos. La mejora inicial era insuficiente.
+
+Esta revisión reserva la primera respuesta dentro de la misma transacción que termina el menú y la envía inmediatamente después del commit. Conserva el bloqueo, la comprobación de orden y la recuperación de entregas inciertas. El recorrido pasa de cinco a cuatro transacciones, y de 17 a 16 consultas SQL. El perfil y el estado del maestro se leen juntos, y los mensajes interactivos ya no despiertan consumidores de fondo sin trabajo. Las conexiones mantienen su verificación de salud.
+
+Cada respuesta registra ahora `response_ms` desde entrada al proceso hasta confirmación de Telegram; el campo queda disponible para medir resultados reales sin acceder al contenido del mensaje. La nueva medición posterior se incluye en el informe de despliegue, no se deduce del benchmark simulado.
+
 ## Versión 0.3.0 · recorrido completo
 
 En el historial real del maestro anterior se observaron 48 respuestas: mediana de 7 segundos desde registro del mensaje hasta completar el primer envío, p95 de 9 segundos, con resolución de un segundo.

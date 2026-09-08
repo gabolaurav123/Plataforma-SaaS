@@ -33,7 +33,7 @@ def enforce_write_scope(session, *_):
 
 class Database:
     def __init__(self, settings):
-        self.on_jobs = lambda: None
+        self.on_jobs = lambda lanes=None: None
         self.on_bots = lambda: None
 
         def engine(url):
@@ -42,6 +42,8 @@ class Database:
                 kwargs["connect_args"] = {"check_same_thread": False}
                 if ":memory:" in url:
                     kwargs["poolclass"] = StaticPool
+            else:
+                kwargs["pool_use_lifo"] = True
             result = create_engine(url, **kwargs)
             if url.startswith("sqlite"):
 
@@ -65,7 +67,7 @@ class Database:
             with session.begin():
                 yield session
             if session.info.get("jobs_enqueued"):
-                self.on_jobs()
+                self.on_jobs(session.info.get("job_lanes"))
             if session.info.get("bots_changed"):
                 self.on_bots()
 
@@ -81,7 +83,7 @@ class Database:
                 )
             yield session
         if session.info.get("jobs_enqueued"):
-            self.on_jobs()
+            self.on_jobs(session.info.get("job_lanes"))
         if session.info.get("bots_changed"):
             self.on_bots()
 

@@ -9,6 +9,23 @@ from platform_app.api.webhooks import store_update
 from test_native_telegram import Chat
 
 
+def test_interactive_updates_do_not_wake_background_consumers(env):
+    from threading import Event
+
+    r = env["r"]
+    interactive, background_wake = Event(), Event()
+    r.job_wakeups = [(interactive, "interactive"), (background_wake, "background")]
+    store_update(None, None, {"update_id": 88101, "message": {"from": {"id": 101}}}, r, polling=True)
+    assert interactive.is_set() and not background_wake.is_set()
+    interactive.clear()
+    with r.db.system() as db:
+        from platform_app.services.common import enqueue
+
+        enqueue(db, "TICK", None, {}, "wake-background")
+        assert not background_wake.is_set()  # Notifications only follow a successful commit.
+    assert background_wake.is_set() and not interactive.is_set()
+
+
 def incoming(env, actor, number, **content):
     update = {
         "update_id": number,

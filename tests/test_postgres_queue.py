@@ -159,3 +159,82 @@ def test_postgres_two_consumers_cannot_claim_same_job(pg_runtime):
     with ThreadPoolExecutor(2) as pool:
         results = list(pool.map(claim, range(2)))
     assert results.count(job_id) == 1 and results.count(None) == 1
+
+
+def test_reserved_reply_is_durable_before_telegram_send(pg_runtime, monkeypatch):
+    r, _, pglite = pg_runtime
+    if pglite:
+        pytest.skip("Independent transaction visibility is checked on PostgreSQL 18")
+    r.settings.deployment_mode = "telegram"
+    store_update(None, None, update(7101), r, polling=True)
+    client = r.clients.master()
+    original, observed = client.call, []
+
+    def deliver(method, **params):
+        if method == "sendMessage":
+            with r.db.system() as db:
+                assert db.scalar(select(m.TelegramUpdate.status)) == "DONE"
+                assert db.scalar(select(m.Job.status).where(m.Job.kind == "UPDATE")) == "DONE"
+                assert db.scalar(select(m.Job.status).where(m.Job.kind == "SEND")) == "RUNNING"
+                assert db.scalar(select(func.count()).select_from(m.ConsoleButton)) > 0
+                observed.append(params["text"])
+        return original(method, **params)
+
+    monkeypatch.setattr(client, "call", deliver)
+    worker = Worker(r, "interactive")
+    assert worker.run_one() and len(observed) == 1
+    assert not worker.run_one()
+    with r.db.system() as db:
+        reply = db.scalar(select(m.Job).where(m.Job.kind == "SEND"))
+        assert reply.status == "DONE" and reply.payload["response_ms"] >= 0
+
+
+def test_crash_after_reserving_reply_never_causes_automatic_resend(pg_runtime, monkeypatch):
+    r, _, _ = pg_runtime
+    r.settings.deployment_mode = "telegram"
+    store_update(None, None, update(7102), r, polling=True)
+    with r.db.system() as db:
+        update_id = db.scalar(select(m.Job.id).where(m.Job.kind == "UPDATE"))
+    worker = Worker(r, "interactive")
+    original = worker.process_claimed
+
+    def crash_before_delivery(job_id):
+        if job_id != update_id:
+            raise SystemExit("Simulated process death after commit")
+        return original(job_id)
+
+    monkeypatch.setattr(worker, "process_claimed", crash_before_delivery)
+    with pytest.raises(SystemExit):
+        worker.run_one()
+    with r.db.system() as db:
+        assert db.get(m.Job, update_id).status == "DONE"
+        reply = db.scalar(select(m.Job).where(m.Job.kind == "SEND"))
+        assert reply.status == "RUNNING" and reply.attempts == 1
+        reply.lease_until = m.now() - 1
+    assert Worker(r, "interactive").claim() is None
+    with r.db.system() as db:
+        assert db.scalar(select(m.Job.status).where(m.Job.kind == "SEND")) == "DELIVERY_UNKNOWN"
+
+
+def test_reply_rolled_back_by_dialog_is_not_reserved(pg_runtime, monkeypatch):
+    from platform_app.services.console import Console
+    from platform_app.errors import DomainError
+
+    r, _, _ = pg_runtime
+    r.settings.deployment_mode = "telegram"
+    with r.db.system() as db:
+        db.add(m.ConsoleState(bot_key="master", telegram_user_id=101, expires_at=m.now() + 3600))
+
+    def fail_after_reply(ui, message, query):
+        ui.say("Rolled back reply")
+        raise DomainError("TEST_ERROR", "Expected test failure")
+
+    monkeypatch.setattr(Console, "run", fail_after_reply)
+    request = update(7103)
+    request["message"]["text"] = "form answer"
+    store_update(None, None, request, r, polling=True)
+    assert Worker(r, "interactive").run_one()
+    with r.db.system() as db:
+        replies = list(db.scalars(select(m.Job).where(m.Job.kind == "SEND")))
+        assert len(replies) == 1 and replies[0].status == "DONE"
+        assert "Rolled back reply" not in replies[0].payload["text"]

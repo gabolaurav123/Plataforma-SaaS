@@ -303,7 +303,7 @@ class PollingEngine:
         ]:
             for _ in range(count):
                 wake = threading.Event()
-                self.r.job_wakeups.append(wake)
+                self.r.job_wakeups.append((wake, lane))
                 thread = threading.Thread(
                     target=self.drain, args=(lane, wake), name="queue-" + lane, daemon=True
                 )
@@ -330,7 +330,7 @@ class PollingEngine:
                 wake.set()
             for thread, wake in self.drainers:
                 thread.join(15)
-                self.r.job_wakeups.remove(wake)
+                self.r.job_wakeups[:] = [(event, lane) for event, lane in self.r.job_wakeups if event is not wake]
             for poller in self.pollers.values():
                 poller.stop.set()
             for poller in self.pollers.values():

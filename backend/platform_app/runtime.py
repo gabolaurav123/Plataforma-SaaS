@@ -53,6 +53,7 @@ class Runtime:
         if self.db.system_engine is not self.db.engine:
             self.db.system_engine.dispose()
 
-    def notify_jobs(self):
-        for wake in list(self.job_wakeups):
-            wake.set()
+    def notify_jobs(self, lanes=None):
+        for wake, lane in list(self.job_wakeups):
+            if not lanes or lane in lanes:
+                wake.set()

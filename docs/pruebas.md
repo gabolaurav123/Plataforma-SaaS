@@ -1,6 +1,8 @@
-# Pruebas de Telegram · versión 0.3.0
+# Pruebas de Telegram · versión 0.3.1
 
-La suite contiene 156 casos. GitHub ejecuta el backend en Python 3.13 con PostgreSQL 18 real, además del esquema PostgreSQL y del frontend opcional conservado. El resultado de cada revisión está en [Platform checks](https://github.com/gabolaurav123/Plataforma-SaaS/actions/workflows/ci.yml); el informe de entrega identifica la revisión comprobada y desplegada.
+La suite contiene 160 casos. GitHub ejecuta el backend en Python 3.13 con PostgreSQL 18 real, además del esquema PostgreSQL y del frontend opcional conservado. El resultado de cada revisión está en [Platform checks](https://github.com/gabolaurav123/Plataforma-SaaS/actions/workflows/ci.yml); el informe de entrega identifica la revisión comprobada y desplegada.
+
+La revisión 0.3.1 comprueba además que el menú y su reserva de envío están confirmados en una transacción independiente antes de llamar a Telegram, que una caída entre el commit y el envío no causa un reenvío automático, que una respuesta anulada por un formulario no se entrega y que los trabajos interactivos no despiertan la cola de fondo.
 
 ## Evidencia local de esta actualización
 

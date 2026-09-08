@@ -101,16 +101,21 @@ def handle(runtime, session, update, bot=None):
             "/id",
         }
     )
+    previous_replies = list(session.info.get("console_replies", []))
     try:
         with nullcontext() if navigation_only else session.begin_nested():
             ui.run(message, query)
     except (DomainError, ValidationError, ValueError, InvalidOperation) as error:
+        if not navigation_only:
+            session.info["console_replies"] = previous_replies
         # Never echo validation input (which might contain a pasted token).
         from .i18n import error_text
 
         text = error_text(error, ui.language)
         ui.say("⚠️ " + text + ui.t("ui_46ce881775"))
     except Exception:
+        if not navigation_only:
+            session.info["console_replies"] = previous_replies
         logging.getLogger("platform.console").error(
             "console_operation_failed", extra={"bot_key": ui.key, "update_id": update["update_id"]}
         )
@@ -122,8 +127,18 @@ class Console:
     def __init__(self, runtime, session, bot, update, actor):
         self.r, self.db, self.bot, self.update, self.actor = runtime, session, bot, update, actor
         self.key, self.count = bot.id if bot else "master", 0
+        profile = (
+            session.execute(
+                select(m.PlatformUser, m.ConsoleState)
+                .join(m.ConsoleState, m.ConsoleState.telegram_user_id == m.PlatformUser.telegram_user_id)
+                .where(m.PlatformUser.telegram_user_id == actor["id"], m.ConsoleState.bot_key == self.key)
+                .with_for_update(of=m.ConsoleState)
+            ).one_or_none()
+            if not bot else None
+        )
+        self._preloaded_state = profile[1] if profile else None
         self.user = (
-            tenants.upsert_user(session, actor)
+            tenants.upsert_user(session, actor, existing=profile[0] if profile else None)
             if not bot
             else session.scalar(select(m.PlatformUser).where(m.PlatformUser.telegram_user_id == actor["id"]))
         )
@@ -204,7 +219,7 @@ class Console:
     def state(self):
         if self._state is not None:
             return self._state
-        row = self.db.scalar(
+        row = self._preloaded_state or self.db.scalar(
             select(m.ConsoleState)
             .where(m.ConsoleState.bot_key == self.key, m.ConsoleState.telegram_user_id == self.actor["id"])
             .with_for_update()

@@ -92,6 +92,7 @@ def store_polling_postgres(session, bot_id, tenant_id, update, values):
     inserted = session.scalar(statement)
     if inserted:
         session.info["jobs_enqueued"] = True
+        session.info.setdefault("job_lanes", set()).add("interactive")
     return {"ok": True, **({"duplicate": True} if not inserted else {})}
 
 
@@ -158,6 +159,7 @@ def store_update(bot_id, tenant_id, update, r, *, polling=False):
                 )
             safe_update, encrypted = deepcopy(update), None
             safe_update["_ingested_at_ms"] = ingested_at_ms
+            safe_update["_timing_version"] = "0006.1"
             message = update.get("message", {})
             if message.get("chat", {}).get("type") == "private":
                 encrypted = r.vault.encrypt(json.dumps(update), f"transport:{bot_key}:{update['update_id']}")

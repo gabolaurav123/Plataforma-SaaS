@@ -5,7 +5,7 @@ import signal
 import time
 import base64
 from contextlib import nullcontext
-from sqlalchemy import select, func, exists, cast, String, case, update as sql_update
+from sqlalchemy import select, func, exists, cast, String, case, inspect, update as sql_update
 from sqlalchemy.orm import aliased, undefer
 from .models import (
     Job,
@@ -293,10 +293,12 @@ class Worker:
             session, job, "SENT", result.get("message_id") if isinstance(result, dict) else None
         )
         if job.payload.get("ingested_at_ms"):
+            response_ms = max(0, int(time.time() * 1000) - job.payload["ingested_at_ms"])
+            job.payload = {**job.payload, "response_ms": response_ms}
             log.info(
                 "telegram_response bot=%s response_ms=%d",
                 job.bot_id or "master",
-                max(0, int(time.time() * 1000) - job.payload["ingested_at_ms"]),
+                response_ms,
             )
         audit(session, job.tenant_id, "worker", "MESSAGE_SENT", job.id)
 
@@ -493,12 +495,37 @@ class Worker:
         job_id = self.claim()
         if not job_id:
             return False
+        return self.process_claimed(job_id)
+
+    def reserve_reply(self, session, update_job):
+        if update_job.kind != "UPDATE" or session.bind.dialect.name != "postgresql":
+            return None
+        candidates = [
+            reply
+            for reply in session.info.get("console_replies", [])
+            if inspect(reply).persistent
+            and reply.status == "PENDING"
+            and reply.bot_id == update_job.bot_id
+            and reply.tenant_id == update_job.tenant_id
+            and reply.stream_key == update_job.stream_key
+            and update_job.sequence < reply.sequence < update_job.sequence + 100
+        ]
+        if not candidates:
+            return None
+        reply = min(candidates, key=lambda row: row.sequence)
+        reply.status, reply.lease_owner = "RUNNING", self.worker_id
+        reply.lease_until, reply.started_at = now() + self.r.settings.worker_lease_seconds, now()
+        reply.attempts += 1
+        return reply.id
+
+    def process_claimed(self, job_id):
+        reserved_reply, committed = None, False
         try:
             with self.r.db.system() as session:
                 # Keep the job row locked throughout remote provisioning too. A lease
                 # timeout cannot give the same active job to a second worker.
                 job = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
-                if job.status != "RUNNING" or job.lease_owner != self.worker_id:
+                if not job or job.status != "RUNNING" or job.lease_owner != self.worker_id:
                     return True
                 if job.kind == "PROVISION":
                     self.r.provisioner.provision(
@@ -507,6 +534,8 @@ class Worker:
                 else:
                     self.dispatch(session, job)
                 job.status = "DONE"
+                reserved_reply = self.reserve_reply(session, job)
+            committed = True
         except RetryLater as error:
             with self.r.db.system() as session:
                 job = session.get(Job, job_id)
@@ -597,6 +626,10 @@ class Worker:
                         )
             # Never log the exception, HTTP URL, update body, or provider response.
             log.error("job_failed", extra={"job_id": job_id, "error_code": code})
+        if committed and reserved_reply:
+            # The menu, buttons and SEND lease are durable before contacting Telegram.
+            # A crash here leaves an uncertain SEND; normal recovery never resends it blindly.
+            self.process_claimed(reserved_reply)
         return True
 
 

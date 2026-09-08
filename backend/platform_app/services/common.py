@@ -67,6 +67,7 @@ def enqueue(
     )
     if inserted:
         session.info["jobs_enqueued"] = True
+        session.info.setdefault("job_lanes", set()).add(job.lane)
     return job
 
 
@@ -96,7 +97,7 @@ def send(session, bot, chat_id, text, key, **extra):
     if key.startswith("console:"):
         parts = key.rsplit(":", 2)
         sequence = int(parts[-2]) * 100 + int(parts[-1])
-    return enqueue(
+    job = enqueue(
         session,
         "SEND",
         bot.tenant_id if bot else None,
@@ -107,3 +108,6 @@ def send(session, bot, chat_id, text, key, **extra):
         stream_key=f"{bot.id if bot else 'master'}:{chat_id}" if interactive else None,
         sequence=sequence,
     )
+    if key.startswith("console:"):
+        session.info.setdefault("console_replies", []).append(job)
+    return job
